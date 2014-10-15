@@ -16,7 +16,7 @@ namespace StackOverflowTagServer
             //var numQuestions = 500000; // 1/2 a million
             var rawQuestions = new List<Question>(numQuestions);
 
-            var filename = @"C:\Users\matt.warren\Desktop\StackOverflow Tag Server Project\Questions.bin";
+            var filename = @"C:\Users\Matt\Documents\GitHub\StackOverflowTagServer\Questions.bin";
             List<Question> rttQuestions;
             var fileReadTimer = Stopwatch.StartNew();
             using (var file = File.OpenRead(filename))
@@ -71,8 +71,8 @@ namespace StackOverflowTagServer
             var totalCount = groupedTags.Sum(x => x.Count);
             var differentTags = groupedTags.Count;
             tagGroupingTimer.Stop();
-            Console.WriteLine("Took {0} ({1} ms) to group all the tags\n", 
-                        tagGroupingTimer.Elapsed, tagGroupingTimer.ElapsedMilliseconds);
+            Console.WriteLine("Took {0} ({1} ms) to group all the tags, there are {2} groups\n", 
+                        tagGroupingTimer.Elapsed, tagGroupingTimer.ElapsedMilliseconds, differentTags);
 
             var tagServer = new TagServer(rawQuestions, groupedTags.ToDictionary(x => x.Tag, tag => tag.Count));
 
@@ -110,7 +110,7 @@ namespace StackOverflowTagServer
         {
             questions = questionsList;
             var numQuestions = questions.Count;
-            
+
             sortedByCreationDate = Enumerable.Range(0, numQuestions).ToArray();
             sortedByLastUpdateDate = Enumerable.Range(0, numQuestions).ToArray();
 
@@ -190,7 +190,7 @@ namespace StackOverflowTagServer
                });
             Console.WriteLine("Doing a Except (NOT) of C#, Java tags took {0} msecs - all match {1}",
                         exceptTimer.ElapsedMilliseconds, allExceptMatch);
-           
+
             var tagsThatAppearWithCSharpTimer = Stopwatch.StartNew();
             var tagsThatAppearWithCSharpLookup = new Dictionary<string, int>();
             for (int i = 0; i < csharpTags.Length; i++)

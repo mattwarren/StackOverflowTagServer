@@ -7,39 +7,10 @@ using System.Linq;
 using System.Xml;
 using System.Xml.Linq;
 using ProtoBuf;
-using System.Collections.ObjectModel;
+using Shared;
 
 namespace CommentXMLParser
 {
-    public static class Extensions
-    {
-        public static IEnumerable<IEnumerable<T>> Partition<T>(this IEnumerable<T> source, int size)
-        {
-            T[] array = null;
-            int count = 0;
-            foreach (T item in source)
-            {
-                if (array == null)
-                {
-                    array = new T[size];
-                }
-                array[count] = item;
-                count++;
-                if (count == size)
-                {
-                    yield return new ReadOnlyCollection<T>(array);
-                    array = null;
-                    count = 0;
-                }
-            }
-            if (array != null)
-            {
-                Array.Resize(ref array, count);
-                yield return new ReadOnlyCollection<T>(array);
-            }
-        }
-    }
-
     class Program
     {
         //From http://blogs.msdn.com/b/xmlteam/archive/2007/03/24/streaming-with-linq-to-xml-part-2.aspx
@@ -69,23 +40,22 @@ namespace CommentXMLParser
 
         static void Main(string[] args)
         {
-            string inputUrl = @"C:\Users\Matt\Downloads\Stack Exchange Data Dump - Sept 2013\Content\posts.xml";
-
-            var filename = "Questions.bin";
-            //var recreate = true; // false;
+            string inputUrl = @"D:\Source\__RavenDB__\SO Datadump - 20-04-2010\posts.xml";
+            
+            var filename = "Questions-NEW.bin";
             var recreate = false;
             if (recreate)
             {
-                //var timer = Stopwatch.StartNew();
+                var timer = Stopwatch.StartNew();
                 var questions = SimpleStreamAxis(inputUrl)
-                    .Where(el => (string)el.Attribute("PostTypeId") == "1") // Answers are "2", everything else is "Other"
+                    .Where(el => (string) el.Attribute("PostTypeId") == "1")
                     .Select(el =>
                     {
                         return new Question
                         {
                             Id = long.Parse((string)el.Attribute("Id")),
                             Title = (string)el.Attribute("Title"),
-                            Tags = (string)el.Attribute("Tags"),
+                            RawTags = (string)el.Attribute("Tags"),
                             CreationDate =
                                 DateTime.Parse((string)el.Attribute("CreationDate"), null, DateTimeStyles.RoundtripKind),
                             LastActivityDate =
@@ -95,34 +65,37 @@ namespace CommentXMLParser
                             AnswerCount = ParseIntOrNullable((string)el.Attribute("AnswerCount")),
                             AcceptedAnswerId = ParseIntOrNullable((string)el.Attribute("AcceptedAnswerId"))
                         };
-                    });
+                    })
+                    //.Take(1000)
+                    .ToList();
+                timer.Stop();
 
+                Console.WriteLine("Took {0} ({1} ms) to process {2} items",
+                                  timer.Elapsed, timer.ElapsedMilliseconds, questions.Count);
+
+                foreach (var value in questions.Take(10))
+                {
+                    Console.WriteLine(value);
+                }    
+                
                 if (File.Exists(filename))
                     File.Delete(filename);
 
-                var timer = Stopwatch.StartNew();
-                var questionCounter = 0;
+                var fileWriteTimer = Stopwatch.StartNew();
                 using (var file = File.Create(filename))
                 {
-                    var chunkCounter = 0;
-                    foreach (var chunk in questions.Partition(100000))
-                    {
-                        Serializer.Serialize(file, chunk);
-                        chunkCounter++;
-                        var chunkSize = chunk.Count();
-                        questionCounter += chunkSize;
-                        Console.WriteLine("Wrote chunk {0,3}, with {1} items, {2,8} items so far", chunkCounter, chunkSize, questionCounter);
-                    }
+                    //Serializer.Serialize(file, values.Where(x => x.AcceptedAnswerId == null).Take(100).ToList());
+                    //Serializer.Serialize(file, values.Where(x => x.AnswerCount == null).Take(100).ToList());
+                    Serializer.Serialize(file, questions);
                 }
-                timer.Stop();
-                Console.WriteLine("Took {0} to serialise {1} items to the file", timer.Elapsed, questionCounter);
+                fileWriteTimer.Stop();
+                Console.WriteLine("Took {0} to serialise {1} items to the file", fileWriteTimer.Elapsed, questions.Count);
             }
 
             List<Question> rttQuestions;
             var fileReadTimer = Stopwatch.StartNew();
             using (var file = File.OpenRead(filename))
             {
-                //Serializer.Deserialize<ListQuestion
                 rttQuestions = Serializer.Deserialize<List<Question>>(file);
             }
             fileReadTimer.Stop();
@@ -172,27 +145,28 @@ namespace CommentXMLParser
             return int.Parse(text);
         }
 
-        [ProtoContract]
-        public class Question
-        {
-            [ProtoMember(1)]
-            public long Id { get; set; }
-            [ProtoMember(2)]
-            public string Title { get; set; }
-            [ProtoMember(3)]
-            public string Tags { get; set; }
-            [ProtoMember(4)]
-            public DateTime CreationDate { get; set; }
-            [ProtoMember(5)]
-            public DateTime LastActivityDate { get; set; }
-            [ProtoMember(6)]
-            public int? Score { get; set; }
-            [ProtoMember(7)]
-            public int? ViewCount { get; set; }
-            [ProtoMember(8)]
-            public int? AnswerCount { get; set; }
-            [ProtoMember(9)]
-            public int? AcceptedAnswerId { get; set; }
-        }
+        // Using version from Shared Library
+        //[ProtoContract]
+        //public class Question
+        //{
+        //    [ProtoMember(1)]
+        //    public long Id { get; set; }
+        //    [ProtoMember(2)]
+        //    public string Title { get; set; }
+        //    [ProtoMember(3)]
+        //    public string Tags { get; set; }
+        //    [ProtoMember(4)]
+        //    public DateTime CreationDate { get; set; }
+        //    [ProtoMember(5)]
+        //    public DateTime LastActivityDate { get; set; }
+        //    [ProtoMember(6)]
+        //    public int? Score { get; set; }
+        //    [ProtoMember(7)]
+        //    public int? ViewCount { get; set; }
+        //    [ProtoMember(8)]
+        //    public int? AnswerCount { get; set; }
+        //    [ProtoMember(9)]
+        //    public int? AcceptedAnswerId { get; set; }
+        //}
     }
 }
