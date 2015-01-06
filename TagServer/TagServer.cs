@@ -1,10 +1,12 @@
 ﻿using ProtoBuf;
 using Shared;
+using StackOverflowTagServer.DataStructures;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace StackOverflowTagServer
 {
@@ -12,29 +14,35 @@ namespace StackOverflowTagServer
     {
         public delegate void LogAction(string format, params object[] args);
 
-        private readonly Dictionary<string, TagWithPositions> groupedTags;
-        public Dictionary<string, TagWithPositions> AllTags { get { return groupedTags; } }
+        private readonly Dictionary<string, int> allTags;
+        public Dictionary<string, int> AllTags { get { return allTags; } }
 
         private readonly List<Question> questions;
         public List<Question> Questions { get { return questions; } }
 
+        private readonly List<string> messages = new List<string>();
+        public List<string> Messages { get { return messages; } }
+
         private readonly Dictionary<string, List<KeyValuePair<string, int>>> relatedTags;
 
+        // GetQueryTypeInfo(QueryType type) Maps these Dictionaries to a QueryType (enum)
         private readonly Dictionary<string, int[]> tagsByAnswerCount;
         private readonly Dictionary<string, int[]> tagsByCreationDate;
         private readonly Dictionary<string, int[]> tagsByLastActivityDate;
         private readonly Dictionary<string, int[]> tagsByScore;
         private readonly Dictionary<string, int[]> tagsByViewCount;
 
-        private readonly List<string> messages = new List<string>();
-        public List<string> Messages { get { return messages; } }
+        private readonly QueryProcessor queryProcessor;
 
         public TagServer(List<Question> questionsList)
         {
             questions = questionsList;
+            queryProcessor = new QueryProcessor(questions, type => GetQueryTypeInfo(type));
 
-            groupedTags = CreateTagGroupings();
-            relatedTags = CreateRelatedTags();
+            var groupedTags = CreateTagGroupings();
+            relatedTags = CreateRelatedTags(groupedTags);
+
+            allTags = groupedTags.ToDictionary(t => t.Key, t => t.Value.Count);
 
             tagsByLastActivityDate = new Dictionary<string, int[]>(groupedTags.Count);
             tagsByCreationDate = new Dictionary<string, int[]>(groupedTags.Count);
@@ -44,9 +52,30 @@ namespace StackOverflowTagServer
 
             CreateSortedLists(groupedTags);
 
+            GC.Collect(2, GCCollectionMode.Forced);
             Log("After SETUP - Using {0:0.00} MB of memory in total\n", GC.GetTotalMemory(true) / 1024.0 / 1024.0);
 
             ValidateTagOrdering();
+        }
+
+        internal TagServer(List<Question> questionsList, Dictionary<string, int> allTags, 
+                           Dictionary<QueryType, Dictionary<string, int[]>> intermediateValues)
+        {
+            questions = questionsList;
+            queryProcessor = new QueryProcessor(questions, type => GetQueryTypeInfo(type));
+            this.allTags = allTags;
+
+            tagsByAnswerCount = intermediateValues[QueryType.AnswerCount];
+            tagsByCreationDate = intermediateValues[QueryType.CreationDate];
+            tagsByLastActivityDate = intermediateValues[QueryType.LastActivityDate];
+            tagsByScore = intermediateValues[QueryType.Score];
+            tagsByViewCount = intermediateValues[QueryType.ViewCount];
+
+            GC.Collect(2, GCCollectionMode.Forced);
+            Log("After SETUP - Using {0:0.00} MB of memory in total\n", GC.GetTotalMemory(true) / 1024.0 / 1024.0);
+
+            // This takes a while, maybe don't do it when using Intermediate results (that have already has this check?)
+            //ValidateTagOrdering();
         }
 
         public static TagServer CreateFromFile(string filename)
@@ -62,8 +91,6 @@ namespace StackOverflowTagServer
             var memoryAfter = GC.GetTotalMemory(true);
 
             var tagServer = new TagServer(rawQuestions);
-            //var initialMsg = 
-            //tagServer.Messages.Insert
             tagServer.Log("Took {0} ({1:N0} ms) to DE-serialise {2:N0} Stack Overflow Questions from the file, used {3:0.00} MB of memory\n",
                                 fileReadTimer.Elapsed, fileReadTimer.Elapsed.TotalMilliseconds, rawQuestions.Count, (memoryAfter - memoryBefore) / 1024.0 / 1024.0);
             return tagServer;
@@ -77,34 +104,61 @@ namespace StackOverflowTagServer
 
         public List<Question> Query(QueryType type, string tag, int pageSize = 50, int skip = 0 /*, bool ascending = true*/)
         {
-            var timer = Stopwatch.StartNew();
-            Dictionary<string, int[]> queryInfo = GetQueryTypeInfo(type);
-            Func<Question, string> fieldSelector = GetFieldSelector(type);
-            
-            if (string.IsNullOrWhiteSpace(tag) || queryInfo.ContainsKey(tag) == false)
-                throw new InvalidOperationException(string.Format("Invalid tag specified: {0}", tag ?? "<NULL>"));
-            
-            if (pageSize < 1 || pageSize > 250)
-                throw new InvalidOperationException(string.Format("Invalid page size provided: {0}, only values from 1 to 250 are allowed", pageSize));
-
-            var result = queryInfo[tag]
-                // how to efficiently deal with ascending (i.e. start at the end and work backwards)
-                .Skip(skip)
-                .Take(pageSize)
-                .Select(i => questions[i])
-                .ToList();
-            timer.Stop();
-
-            Console.WriteLine("Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms)",
-                                type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
-            Console.WriteLine("  {0}", string.Join("\n  ",
-                result.Select(r => string.Format("Id: {0,7}, {1}: {2}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)))));
-            Console.WriteLine("\n");
-
-            return result;
+            return queryProcessor.Query(type, tag, pageSize, skip);
         }
 
-        private Dictionary<string, List<KeyValuePair<string, int>>> CreateRelatedTags()
+        public List<Question> ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0)
+        {
+            return queryProcessor.ComparisonQuery(type, tag1, tag2, @operator, pageSize, skip);
+        }
+
+        public List<Question> BooleanQueryWithExclusionsSlowVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
+        {
+            return queryProcessor.BooleanQueryWithExclusionsSlowVersion(type, tag, excludedTags, pageSize, skip);
+        }
+
+        public List<Question> BooleanQueryWithExclusionsFastVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
+        {
+            return queryProcessor.BooleanQueryWithExclusionsFastVersion(type, tag, excludedTags, pageSize, skip);
+        }
+
+        public List<Question> BooleanQueryWithExclusionsFastAlternativeVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
+        {
+            return queryProcessor.BooleanQueryWithExclusionsFastAlternativeVersion(type, tag, excludedTags, pageSize, skip);
+        }
+
+        public List<Question> BooleanQueryWithExclusionsBloomFilterVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
+        {
+            return queryProcessor.BooleanQueryWithExclusionsBloomFilterVersion(type, tag, excludedTags, pageSize, skip);
+        }
+
+        public Dictionary<string, int[]> GetQueryTypeInfo(QueryType type)
+        {
+            Dictionary<string, int[]> queryInfo;
+            switch (type)
+            {
+                case QueryType.LastActivityDate:
+                    queryInfo = tagsByLastActivityDate;
+                    break;
+                case QueryType.CreationDate:
+                    queryInfo = tagsByCreationDate;
+                    break;
+                case QueryType.Score:
+                    queryInfo = tagsByScore;
+                    break;
+                case QueryType.ViewCount:
+                    queryInfo = tagsByViewCount;
+                    break;
+                case QueryType.AnswerCount:
+                    queryInfo = tagsByAnswerCount;
+                    break;
+                default:
+                    throw new InvalidOperationException(string.Format("Invalid query type {0}", (int)type));
+            }
+            return queryInfo;
+        }
+
+        private Dictionary<string, List<KeyValuePair<string, int>>> CreateRelatedTags(Dictionary<string, TagWithPositions> groupedTags)
         {
             var memoryBefore = GC.GetTotalMemory(true);
             var relatedTagsTimer = Stopwatch.StartNew();
@@ -219,65 +273,14 @@ namespace StackOverflowTagServer
             validator.ValidateTags(GetQueryTypeInfo(QueryType.AnswerCount), (qu, prev) => Nullable.Compare(qu.AnswerCount, prev.AnswerCount) <= 0);
             validationTimer.Stop();
             Log("Took {0} ({1:N0} ms) to VALIDATE all the {2:N0} arrays\n",
-                  validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, groupedTags.Count * 5);
-        }
-
-        private Dictionary<string, int[]> GetQueryTypeInfo(QueryType type)
-        {
-            Dictionary<string, int[]> queryInfo;
-            switch (type)
-            {
-                case QueryType.LastActivityDate:
-                    queryInfo = tagsByLastActivityDate;
-                    break;
-                case QueryType.CreationDate:
-                    queryInfo = tagsByCreationDate;
-                    break;
-                case QueryType.Score:
-                    queryInfo = tagsByScore;
-                    break;
-                case QueryType.ViewCount:
-                    queryInfo = tagsByViewCount;
-                    break;
-                case QueryType.AnswerCount:
-                    queryInfo = tagsByAnswerCount;
-                    break;
-                default:
-                    throw new InvalidOperationException(string.Format("Invalid query type {0}", (int)type));
-            }
-            return queryInfo;
-        }
-
-        private Func<Question, string> GetFieldSelector(QueryType type)
-        {
-            Func<Question, string> fieldSelector;
-            switch (type)
-            {
-                case QueryType.LastActivityDate:
-                    fieldSelector = qu => qu.LastActivityDate.ToString();
-                    break;
-                case QueryType.CreationDate:
-                    fieldSelector = qu => qu.CreationDate.ToString();
-                    break;
-                case QueryType.Score:
-                    fieldSelector = qu => qu.Score.HasValue ? qu.Score.ToString() : "<null>";
-                    break;
-                case QueryType.ViewCount:
-                    fieldSelector = qu => qu.ViewCount.HasValue ? qu.ViewCount.ToString() : "<null>";
-                    break;
-                case QueryType.AnswerCount:
-                    fieldSelector = qu => qu.AnswerCount.HasValue ? qu.AnswerCount.ToString() : "<null>";
-                    break;
-                default:
-                    throw new InvalidOperationException(string.Format("Invalid query type {0}", (int)type));
-            }
-            return fieldSelector;
+                  validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
         }
 
         private void Log(string format, params object[] args)
         {
             var msg = string.Format(format, args);
             Console.WriteLine(msg);
+            Trace.WriteLine(msg);
             messages.Add(msg);
         }
 

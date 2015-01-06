@@ -13,7 +13,6 @@ namespace StackOverflowTagServer
 
         internal QueryTester(List<Question> questions)
         {
-            // TODO: Complete member initialization
             this.questions = questions;
         }
 
