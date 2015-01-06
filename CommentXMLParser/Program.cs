@@ -40,10 +40,12 @@ namespace CommentXMLParser
 
         static void Main(string[] args)
         {
-            string inputUrl = @"D:\Source\__RavenDB__\SO Datadump - 20-04-2010\posts.xml";
-            
+            //string inputUrl = @"D:\Source\__RavenDB__\SO Datadump - 20-04-2010\posts.xml";
+            var inputUrl = @"C:\Users\warma11\Desktop\SO Posts\Posts - latest version 22-10-2013.xml";
+
             var filename = "Questions-NEW.bin";
-            var recreate = false;
+            //var recreate = false;
+            var recreate = true;
             if (recreate)
             {
                 var timer = Stopwatch.StartNew();
@@ -76,8 +78,8 @@ namespace CommentXMLParser
                 foreach (var value in questions.Take(10))
                 {
                     Console.WriteLine(value);
-                }    
-                
+                }
+
                 if (File.Exists(filename))
                     File.Delete(filename);
 
@@ -87,6 +89,7 @@ namespace CommentXMLParser
                     //Serializer.Serialize(file, values.Where(x => x.AcceptedAnswerId == null).Take(100).ToList());
                     //Serializer.Serialize(file, values.Where(x => x.AnswerCount == null).Take(100).ToList());
                     Serializer.Serialize(file, questions);
+                    //Serializer.Serialize()
                 }
                 fileWriteTimer.Stop();
                 Console.WriteLine("Took {0} to serialise {1} items to the file", fileWriteTimer.Elapsed, questions.Count);
