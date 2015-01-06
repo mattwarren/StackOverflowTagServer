@@ -8,15 +8,34 @@ using System.Web.Http;
 using Server.Infrastructure;
 using System.Diagnostics;
 using System.Globalization;
+using StackOverflowTagServer.DataStructures;
+using Microsoft.ApplicationInsights; 
 
 namespace Server.Controllers
 {
+    [ActionWebApiFilter]
     public class TagsController : ApiController
     {
         // GET: api/Tags
         public object Get()
         {
-            var tagServer = WebApiApplication.TagServer.Value;
+            var telemetry = new TelemetryClient();
+            try
+            {
+                //telemetry.TrackEvent("API-Tags-Get()");
+                var tagServer = WebApiApplication.TagServer.Value;
+                return GetAPIInfo(tagServer);
+            }
+            catch (Exception ex)
+            {
+                Trace.Write(ex);
+                telemetry.TrackException(ex); //, properties, measurements);
+                return new { Error = ex.ToString().Split(new [] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) };
+            }
+        }
+
+        private object GetAPIInfo(TagServer tagServer)
+        {
             return new
                 {
                     SampleUrls = new 
@@ -38,14 +57,10 @@ namespace Server.Controllers
                     },
                     SetupMessages = tagServer.Messages,
                     Top50Tags = tagServer.AllTags
-                                        .Take(50)
-                                        .Select(t => new { t.Key, t.Value.Count})
-                                        .ToDictionary(t => t.Key, t => t.Count),
+                                        .Take(50),
                     Bottom50Tags = tagServer.AllTags
-                                        .OrderBy(t => t.Value.Count)
+                                        .OrderBy(t => t.Value)
                                         .Take(50)
-                                        .Select(t => new { t.Key, t.Value.Count })
-                                        .ToDictionary(t => t.Key, t => t.Count)
                 };
         }
 
