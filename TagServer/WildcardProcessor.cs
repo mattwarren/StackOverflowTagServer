@@ -3,8 +3,8 @@ using Microsoft.VisualBasic.CompilerServices;
 using StackOverflowTagServer.DataStructures;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
 //using HashSet = System.Collections.Generic.HashSet<string>;
@@ -14,26 +14,35 @@ namespace StackOverflowTagServer
     static class WildcardProcessor
     {
         /// <summary> 1 </summary>
-        internal static readonly int TrieTerminator = 1;
+        private static readonly int TrieTerminator = 1;
 
         /// <summary> -1 </summary>
-        internal static readonly int TrieReverseTerminator = -1;
+        private static readonly int TrieReverseTerminator = -1;        
 
-        internal static string Reverse(string text)
+        internal static Trie<int> CreateTrie(Dictionary<string, int> allTags)
         {
-            if (text == null) 
-                return null;
+            // From http://algs4.cs.princeton.edu/52trie/
+            // 15. Substring matches. 
+            //     Given a list of (short) strings, your goal is to support queries where the user looks up a string s 
+            //     and your job is to report back all strings in the list that contain s. 
+            //     Hint: if you only want prefix matches (where the strings have to start with s), use a TST as described in the text. 
+            //     To support substring matches, insert the suffixes of each word (e.g., string, tring, ring, ing, ng, g) into the TST.
+            var trieSetupTimer = Stopwatch.StartNew();
+            var trie = new Trie<int>();
+            trie.AddRange(allTags.Select(t => new TrieEntry<int>(t.Key, TrieTerminator)));
+            trie.AddRangeAllowDuplicates(allTags.Select(t => new TrieEntry<int>(Reverse(t.Key), TrieReverseTerminator)));
+            trieSetupTimer.Stop();
 
-            char[] array = text.ToCharArray();
-            Array.Reverse(array);
-            return new String(array);
+            Console.WriteLine("\nTook {0} ({1:N2} ms) to SETUP the Trie (ONE-OFF cost)", trieSetupTimer.Elapsed, trieSetupTimer.Elapsed.TotalMilliseconds);
+
+            return trie;
         }
 
         internal static List<string> ExpandTagsVisualBasic(Dictionary<string, int> allTags, List<string> tagsToExpand)
         {
             // For simplicity use Operators.LikeString from Microsoft.VisualBasic.CompilerServices, see
             // http://stackoverflow.com/questions/6907720/need-to-perform-wildcard-etc-search-on-a-string-using-regex/16737492#16737492
-            var expandedTags = new System.Collections.Generic.HashSet<string>();
+            var expandedTags = new HashSet<string>();
             foreach (var tagToExpand in tagsToExpand)
             {
                 if (IsWildCard(tagToExpand))
@@ -73,20 +82,20 @@ namespace StackOverflowTagServer
                     Regex regex = new Regex(regexPattern, RegexOptions.Compiled);
                     foreach (var tag in allTags.Keys)
                     {
-                        if (regex.IsMatch(tag))
-                        {
-                            expandedTags.Add(tag);
+                        if (!regex.IsMatch(tag)) 
+                            continue;
 
-                            //Added "access-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                            //Added "word-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                            //Added "microsoft-project-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                            //Added "visio-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                            //Added "xmlhttp-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                            //if (wierdMatches.Contains(tag))
-                            //{
-                            //    Console.WriteLine("Added \"{0}\", tagToExpand = \"{1}\", regex pattern = {2}", tag, tagToExpand, regexPattern);
-                            //}
-                        }
+                        expandedTags.Add(tag);
+
+                        //Added "access-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
+                        //Added "word-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
+                        //Added "microsoft-project-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
+                        //Added "visio-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
+                        //Added "xmlhttp-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
+                        //if (wierdMatches.Contains(tag))
+                        //{
+                        //    Console.WriteLine("Added \"{0}\", tagToExpand = \"{1}\", regex pattern = {2}", tag, tagToExpand, regexPattern);
+                        //}
                     }
                 }
                 else
@@ -99,7 +108,7 @@ namespace StackOverflowTagServer
             return expandedTags.ToList();
         }
 
-        internal static List<string> ExpandTagsTrie(Dictionary<string, int> allTags, List<string> tagsToExpand, Trie<int> trie)
+        internal static List<string> ExpandTagsTrie(Dictionary<string, int> allTags, List<string> tagsToExpand, Trie<int> trie, bool useNewMode = true)
         {
             // It *seems* like SO only allows prefix, suffix or both, i.e. "java*", "*-vba", "*java*"
             // But not anything else like "ja*a", or "j?va?", etc
@@ -118,14 +127,23 @@ namespace StackOverflowTagServer
                     var lastChar = tagToExpand[tagToExpand.Length - 1];
                     if (firstChar == '*' && lastChar == '*')
                     {
-                        DoStartsWithAndEndsWithSearch(trie, tagToExpand, expandedTags);
+                        var actualTag = tagToExpand.Substring(1, tagToExpand.Length - 2);
+                        if (useNewMode)
+                        {
+                            DoStartsWithSearch(trie, actualTag + "*", expandedTags);
+                            DoEndsWithSearch(trie, "*" + actualTag, expandedTags);
+                        }
+                        else
+                        {
+                            DoStartsWithOrEndsWithSearch(trie, tagToExpand, expandedTags);
+                        }
 
                         // TODO is there a better way to deal with *php*, i.e. matching in the middle of this string, 
                         // The method below is to do a brute-force search, so kills our perf a bit!!!!
-                        var actualTag = tagToExpand.Substring(1, tagToExpand.Length - 2);
+                        // If we don't do this, we miss items that are in the middle i.e. *php* won't match "cakephp-1.0"
                         foreach (var tag in allTags)
                         {
-                            if (tag.Key.Contains(actualTag))
+                            if (tag.Key.Contains(actualTag) && expandedTags.Contains(tag.Key) == false)
                                 expandedTags.Add(tag.Key);
                         }
                     }
@@ -143,7 +161,7 @@ namespace StackOverflowTagServer
             return expandedTags.ToList();
         }
 
-        private static void DoStartsWithAndEndsWithSearch(Trie<int> trie, string tagToExpand, HashSet expandedTags)
+        private static void DoStartsWithOrEndsWithSearch(Trie<int> trie, string tagToExpand, HashSet expandedTags)
         {
             // STARTS-with OR ENDS-with, i.e. *facebook*
             var actualTag = tagToExpand.Substring(1, tagToExpand.Length - 2);
@@ -157,10 +175,10 @@ namespace StackOverflowTagServer
                         expandedTags.Add(startWithMatch.Key);
                     else if (startWithMatch.Value == TrieReverseTerminator)
                         expandedTags.Add(Reverse(startWithMatch.Key));
-#if DEBUG
-                    else
-                        Console.WriteLine("StartsEndsWith 1 - Rejecting {0}, tagToExpand = {1}, tag = {2}", startWithMatch, tagToExpand, actualTag);
-#endif
+//#if DEBUG
+//                    else
+//                        Console.WriteLine("StartsEndsWith 1 - Rejecting {0}, tagToExpand = {1}, tag = {2}", startWithMatch, tagToExpand, actualTag);
+//#endif
                 }
             }
             else
@@ -170,10 +188,10 @@ namespace StackOverflowTagServer
                 {
                     if (startWithMatch.Value == 1)
                         expandedTags.Add(startWithMatch.Key);
-#if DEBUG
-                    else
-                        Console.WriteLine("StartsEndsWith 2 - Rejecting {0}, tagToExpand = {1}, tag = {2}", startWithMatch, tagToExpand, actualTag);
-#endif
+//#if DEBUG
+//                    else
+//                        Console.WriteLine("StartsEndsWith 2 - Rejecting {0}, tagToExpand = {1}, tag = {2}", startWithMatch, tagToExpand, actualTag);
+//#endif
                 }
 
                 var endsWithMatches = trie.GetByPrefix(Reverse(actualTag));
@@ -181,10 +199,10 @@ namespace StackOverflowTagServer
                 {
                     if (endWithMatch.Value == -1)
                         expandedTags.Add(Reverse(endWithMatch.Key));
-#if DEBUG
-                    else
-                        Console.WriteLine("StartsEndsWith 3 - Rejecting {0}, tagToExpand = {1}, tag = {2}", endWithMatch, tagToExpand, Reverse(actualTag));
-#endif
+//#if DEBUG
+//                    else
+//                        Console.WriteLine("StartsEndsWith 3 - Rejecting {0}, tagToExpand = {1}, tag = {2}", endWithMatch, tagToExpand, Reverse(actualTag));
+//#endif
                 }
             }
         }
@@ -198,10 +216,10 @@ namespace StackOverflowTagServer
             {
                 if (match.Value == 1)
                     expandedTags.Add(match.Key);
-#if DEBUG
-                else
-                    Console.WriteLine("StartsWith - Rejecting {0}, tagToExpand = {1}, tag = {2}", match, tagToExpand, actualTag);
-#endif
+//#if DEBUG
+//                else
+//                    Console.WriteLine("StartsWith - Rejecting {0}, tagToExpand = {1}, tag = {2}", match, tagToExpand, actualTag);
+//#endif
             }
         }
 
@@ -214,11 +232,21 @@ namespace StackOverflowTagServer
             {
                 if (match.Value == -1)
                     expandedTags.Add(Reverse(match.Key));
-#if DEBUG
-                else
-                    Console.WriteLine("EndsWith   - Rejecting {0}, tagToExpand = {1}, tag = {2}", match, tagToExpand, Reverse(actualTag));
-#endif
+//#if DEBUG
+//                else
+//                    Console.WriteLine("EndsWith   - Rejecting {0}, tagToExpand = {1}, tag = {2}", match, tagToExpand, Reverse(actualTag));
+//#endif
             }
+        }
+
+        private static string Reverse(string text)
+        {
+            if (text == null)
+                return null;
+
+            char[] array = text.ToCharArray();
+            Array.Reverse(array);
+            return new String(array);
         }
 
         private static bool IsWildCard(string tag)

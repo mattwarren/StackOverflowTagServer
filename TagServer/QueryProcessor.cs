@@ -301,22 +301,21 @@ namespace StackOverflowTagServer
             }
             var baseQuery = queryInfo[tag];
 #if DEBUG
-            var result = baseQuery.Where(b => 
-                                    {
-                                        var possiblyExists = bloomFilter.PossiblyExists(b);
-                                        if (possiblyExists == false)
-                                            return true; // we can use it
-                                        else
-                                        {
-                                            if (debugging.Contains(b) == false)
-                                            {
-                                                var qu = questions[b];
-                                                Console.WriteLine("FALSE +VE: {0,8}, PossiblyExists = {1}, debugging.Contains() = {2}, Id = {3,8}, Tags = {4}",
-                                                                  b, possiblyExists, debugging.Contains(b), qu.Id, string.Join(",", qu.Tags));
-                                            }
-                                            return false; // we can't use it
-                                        }
-                                    })
+            var result = 
+                baseQuery.Where(b => 
+                    {
+                        var possiblyExists = bloomFilter.PossiblyExists(b);
+                        if (possiblyExists == false)
+                            return true; // we can use it
+
+                        if (debugging.Contains(b) == false)
+                        {
+                            var qu = questions[b];
+                            Console.WriteLine("FALSE +VE: {0,8}, PossiblyExists = {1}, debugging.Contains() = {2}, Id = {3,8}, Tags = {4}",
+                                              b, possiblyExists, debugging.Contains(b), qu.Id, string.Join(",", qu.Tags));
+                        }
+                        return false; // we can't use it
+                    })
 #else
             var result = baseQuery.Where(b => bloomFilter.PossiblyExists(b) == false)
 #endif

@@ -1,9 +1,5 @@
 ﻿using Shared;
-using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
 
 namespace StackOverflowTagServer
 {
@@ -18,7 +14,7 @@ namespace StackOverflowTagServer
 
         internal void TestAndOrNotQueries()
         {
-            /// TODO When it's available, do this via the API
+            // TODO When it's available, do this via the API
 
             //var tag1 = "c#";
             //var tag2 = ".net"; // "java"
@@ -60,7 +56,7 @@ namespace StackOverflowTagServer
 
         internal void TestQueries()
         {
-            /// TODO When it's available, do this via the API
+            // TODO When it's available, do this via the API
 
             //var csharpTags = tagsByViewCount["c#"];
             //var javaTags = tagsByViewCount["java"];
