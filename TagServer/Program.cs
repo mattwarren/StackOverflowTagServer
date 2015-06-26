@@ -75,7 +75,7 @@ namespace StackOverflowTagServer
 
             //TestWithNGrams(tagServer.AllTags, leppieTags);
 
-            return;
+            //return;
 
 #region QueryTestingCode
             //var queryTester = new QueryTester(tagServer.Questions);

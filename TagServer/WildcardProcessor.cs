@@ -406,10 +406,6 @@ namespace StackOverflowTagServer
                         expandedTags.Add(startWithMatch.Key);
                     else if (startWithMatch.Value == TrieReverseTerminator)
                         expandedTags.Add(Reverse(startWithMatch.Key));
-//#if DEBUG
-//                    else
-//                        Console.WriteLine("StartsEndsWith 1 - Rejecting {0}, tagToExpand = {1}, tag = {2}", startWithMatch, tagToExpand, actualTag);
-//#endif
                 }
             }
             else
@@ -419,10 +415,6 @@ namespace StackOverflowTagServer
                 {
                     if (startWithMatch.Value == 1)
                         expandedTags.Add(startWithMatch.Key);
-//#if DEBUG
-//                    else
-//                        Console.WriteLine("StartsEndsWith 2 - Rejecting {0}, tagToExpand = {1}, tag = {2}", startWithMatch, tagToExpand, actualTag);
-//#endif
                 }
 
                 var endsWithMatches = trie.GetByPrefix(Reverse(actualTag));
@@ -430,10 +422,6 @@ namespace StackOverflowTagServer
                 {
                     if (endWithMatch.Value == -1)
                         expandedTags.Add(Reverse(endWithMatch.Key));
-//#if DEBUG
-//                    else
-//                        Console.WriteLine("StartsEndsWith 3 - Rejecting {0}, tagToExpand = {1}, tag = {2}", endWithMatch, tagToExpand, Reverse(actualTag));
-//#endif
                 }
             }
         }
@@ -447,10 +435,6 @@ namespace StackOverflowTagServer
             {
                 if (match.Value == 1)
                     expandedTags.Add(match.Key);
-//#if DEBUG
-//                else
-//                    Console.WriteLine("StartsWith - Rejecting {0}, tagToExpand = {1}, tag = {2}", match, tagToExpand, actualTag);
-//#endif
             }
         }
 
@@ -463,10 +447,6 @@ namespace StackOverflowTagServer
             {
                 if (match.Value == -1)
                     expandedTags.Add(Reverse(match.Key));
-//#if DEBUG
-//                else
-//                    Console.WriteLine("EndsWith   - Rejecting {0}, tagToExpand = {1}, tag = {2}", match, tagToExpand, Reverse(actualTag));
-//#endif
             }
         }
 
@@ -475,6 +455,7 @@ namespace StackOverflowTagServer
             if (text == null)
                 return null;
 
+            // Yes I know, this fails badly with Unicode!!!
             char[] array = text.ToCharArray();
             Array.Reverse(array);
             return new String(array);
