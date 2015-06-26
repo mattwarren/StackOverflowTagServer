@@ -24,6 +24,7 @@ namespace StackOverflowTagServer
         /// <summary> -1 </summary>
         private static readonly int TrieReverseTerminator = -1;
 
+        /// <summary> The Word Anchor is a '^' character </summary>
         private static readonly char WordAnchor = '^';
 
         internal static Trie<int> CreateTrie(TagLookup allTags)
@@ -94,16 +95,38 @@ namespace StackOverflowTagServer
             nGramsTimer.Stop();
             Console.WriteLine("\nTook {0} to create {1:N0} n-grams (ONE-OFF cost)\n", nGramsTimer.Elapsed, allNGrams.Count);
 
-
-
             return allNGrams;
         }
 
-        internal static List<string> ExpandTagsVisualBasic(TagLookup allTags, List<string> tagsToExpand)
+        internal static HashSet ExpandTagsContainsStartsWithEndsWith(TagLookup allTags, List<string> tagsToExpand)
+        {
+            var expandedTags = new HashSet();
+            foreach (var tagToExpand in tagsToExpand)
+            {
+                if (IsWildCard(tagToExpand))
+                {
+                    var rawTagPattern = tagToExpand.Replace("*", "");
+                    foreach (var tag in allTags.Keys)
+                    {
+                        if (IsActualMatch(tag, tagToExpand, rawTagPattern))
+                            expandedTags.Add(tag);
+                    }
+                }
+                else
+                {
+                    if (allTags.ContainsKey(tagToExpand))
+                        expandedTags.Add(tagToExpand);
+                }
+            }
+
+            return expandedTags;
+        }
+
+        internal static HashSet ExpandTagsVisualBasic(TagLookup allTags, List<string> tagsToExpand)
         {
             // For simplicity use Operators.LikeString from Microsoft.VisualBasic.CompilerServices, see
             // http://stackoverflow.com/questions/6907720/need-to-perform-wildcard-etc-search-on-a-string-using-regex/16737492#16737492
-            var expandedTags = new HashSet<string>();
+            var expandedTags = new HashSet();
             foreach (var tagToExpand in tagsToExpand)
             {
                 if (IsWildCard(tagToExpand))
@@ -125,10 +148,10 @@ namespace StackOverflowTagServer
                 }
             }
 
-            return expandedTags.ToList();
+            return expandedTags;
         }
 
-        internal static List<string> ExpandTagsRegex(TagLookup allTags, List<string> tagsToExpand)
+        internal static HashSet ExpandTagsRegex(TagLookup allTags, List<string> tagsToExpand)
         {
             // See http://www.c-sharpcorner.com/uploadfile/b81385/efficient-string-matching-algorithm-with-use-of-wildcard-characters/
             // or http://www.henrikbrinch.dk/Blog/2013/03/07/Wildcard-Matching-In-C-Using-Regular-Expressions
@@ -166,10 +189,10 @@ namespace StackOverflowTagServer
                 }
             }
 
-            return expandedTags.ToList();
+            return expandedTags;
         }
-
-        internal static List<string> ExpandTagsTrie(TagLookup allTags, List<string> tagsToExpand, Trie<int> trie, bool useNewMode = true)
+        
+        internal static HashSet ExpandTagsTrie(TagLookup allTags, List<string> tagsToExpand, Trie<int> trie, bool useNewMode = true)
         {
             // It *seems* like SO only allows prefix, suffix or both, i.e. "java*", "*-vba", "*java*"
             // But not anything else like "ja*a", or "j?va?", etc
@@ -219,10 +242,10 @@ namespace StackOverflowTagServer
                 }
             }
 
-            return expandedTags.ToList();
+            return expandedTags;
         }
 
-        internal static HashSet<string> ExpandTagsNGrams(TagLookup allTags, List<string> tagsToExpand, NGrams nGrams)
+        internal static HashSet ExpandTagsNGrams(TagLookup allTags, List<string> tagsToExpand, NGrams nGrams)
         {
             // Query: /Google.*Search/, we can build a query of ANDs and ORs that gives the trigrams that must be present in any text matching the regular expression. 
             // In this case, the query is
@@ -232,11 +255,12 @@ namespace StackOverflowTagServer
             // '*.net' -> .ne AND net // how do we distinguish this from '*.net*'
             // *hibernate* -> hib AND ibe AND ber AND ern AND rna AND nat AND ate
 
-            var expandedTags = new HashSet<string>();
-            var tagsExpandedCounter = 0;
+            var expandedTags = new HashSet();
+            // TODO is there a better way of doing this, as we are creating a tempoary list, just for indexing the dictionary!!!
+            var allTagsList = allTags.Keys.ToList();
             foreach (var tagPattern in tagsToExpand)
             {
-                if (tagPattern.Contains("*") == false)
+                if (IsWildCard(tagPattern) == false)
                 {
                     //not a wildcard, leave it as is
                     if (allTags.ContainsKey(tagPattern))
@@ -244,51 +268,49 @@ namespace StackOverflowTagServer
                     continue; 
                 }
 
-                var searches = Enumerable.Empty<string>();
-                var actualTag = String.Empty;
                 var createSearchTimer = Stopwatch.StartNew();
-                if (tagPattern.StartsWith("*") && tagPattern.EndsWith("*"))
+                var searches = new List<string>();
+                var actualTag = String.Empty;                
+                var firstChar = tagPattern[0];
+                var lastChar = tagPattern[tagPattern.Length - 1];
+                if (firstChar == '*' && lastChar == '*')
                 {
                     // "anywhere" wildcard, i.e. "*foo*"
                     actualTag = tagPattern.Substring(1, tagPattern.Length - 2);
-                    searches = CreateNGramsForSearch(actualTag, N: 3).ToList();
+                    searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
                 }
-                else if (tagPattern.EndsWith("*"))
+                else if (lastChar == '*')
                 {
                     // "starts-with" or prefix search, i.e "foo*"
                     actualTag = tagPattern.Substring(0, tagPattern.Length - 1);
-                    searches = new[] { WordAnchor + actualTag.Substring(0, 2) }
-                        .Concat(CreateNGramsForSearch(actualTag, N: 3))
-                        .ToList();
+                    searches.Add(WordAnchor + actualTag.Substring(0, 2));
+                    searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
                 }
-                else if (tagPattern.StartsWith("*"))
+                else if (firstChar == '*')
                 {
                     // "end-with" or suffix search, i.e "*foo"
                     actualTag = tagPattern.Substring(1, tagPattern.Length - 1);
-                    searches = CreateNGramsForSearch(actualTag, N: 3)
-                                .Concat(new[] { actualTag.Substring(tagPattern.Length - 3, 2) + WordAnchor })
-                                .ToList();
+                    searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
+                    searches.Add(actualTag.Substring(tagPattern.Length - 3, 2) + WordAnchor);
                 }
-                
                 createSearchTimer.Stop();
                 //if (searches.Any())
                 //    Console.WriteLine("Took {0} ({1,5:N0} ms), Tag: \"{2}\" ({3}) -> {4}", createSearchTimer.Elapsed,
                 //                  createSearchTimer.ElapsedMilliseconds, tagPattern, actualTag, String.Join(", ", searches));
 
-                var tagAdded = CollectPossibleNGramMatches(allTags, nGrams, searches, tagPattern, expandedTags);
-
-                if (tagAdded)
-                    tagsExpandedCounter++;
+                var tagAdded = CollectPossibleNGramMatches(allTagsList, nGrams, searches, tagPattern, expandedTags);
             }
             return expandedTags;
         }
 
-        private static bool CollectPossibleNGramMatches(TagLookup allTags, NGrams nGrams, IEnumerable<string> searches, string tagPattern, HashSet<string> expandedTags)
+        private static bool CollectPossibleNGramMatches(
+                List<string> allTagsList, NGrams nGrams, IEnumerable<string> searches, string tagPattern, HashSet expandedTags)
         {
-            var expandTagsTimer = Stopwatch.StartNew();
+            //var expandTagsTimer = Stopwatch.StartNew();
             HashSet<int> expandedTagIds = null;
             foreach (var search in searches)
             {
+                // Sanity check, in case there is a tag in the exclusion list that is no longer an real tag
                 if (nGrams.ContainsKey(search))
                 {
                     var tagLocations = nGrams[search];
@@ -299,36 +321,30 @@ namespace StackOverflowTagServer
                 }
             }
 
-            //var expandedTags = (expandedTagIds ?? Enumerable.Empty<int>()).Select(id => allTagsList[id]).ToList();
-            //allExpandedTags.AddRange(expandedTags);
-
-            var regexPattern = "^" + Regex.Escape(tagPattern).Replace("\\*", ".*") + "$";
-            var regex = new Regex(regexPattern, RegexOptions.Compiled);
-            bool tagAdded = false;
-            // TODO is there a better way of doing this, we have to create a tempoary list, just for indexing the dictionary!!!
-            var allTagsList = allTags.Keys.ToList();
+            var tagsAdded = 0;
+            var rawTagPattern = tagPattern.Replace("*", "");
             foreach (var tagMatch in expandedTagIds.Select(expandedTagId => allTagsList[expandedTagId]))
-            {
-                if (regex.IsMatch(tagMatch))
+            {                
+                if (IsActualMatch(tagMatch, tagPattern, rawTagPattern))
                 {
                     expandedTags.Add(tagMatch);
-                    tagAdded = true;                    
+                    tagsAdded++;                    
                 }
-                else
-                {
-                    //Console.WriteLine("False Positive, Tag: {0}, TagPattern: {1}, Searches: {2}",
-                    //                  tagMatch, tagPattern, String.Join(", ", searches));
-                }
+                //else
+                //{
+                //    Console.WriteLine("False Positive, Tag: {0}, TagPattern: {1}, Searches: {2}",
+                //                      tagMatch, tagPattern, String.Join(", ", searches));
+                //}
             }
-            expandTagsTimer.Stop();
-
-            //Console.WriteLine("Took {0} ({1,5:N0} ms), to expand to {2} Tags:", 
-            //                  expandTagsTimer.Elapsed, expandTagsTimer.ElapsedMilliseconds, expandedTags.Count);
+            //expandTagsTimer.Stop();
+            //Console.WriteLine("Took {0} ({1,5:N0} ms) in TOTAL, to expand to \"{2}\" to {3} Tags ({4} in total):",
+            //                  expandTagsTimer.Elapsed, expandTagsTimer.ElapsedMilliseconds, tagPattern, tagsAdded, expandedTags.Count);
             //Console.WriteLine(String.Join(", ", expandedTags));
             //Console.WriteLine();
-            return tagAdded;
-        }
 
+            return tagsAdded > 0;
+        }
+        
         // Heavily-modified version of the code from http://jakemdrew.com/blog/ngram.htm
         private static IEnumerable<string> CreateNGramsForIndexing(string text, int N)
         {
@@ -467,6 +483,34 @@ namespace StackOverflowTagServer
             return new String(array);
         }
 
+        private static bool IsActualMatch(string tagMatch, string tagPattern, string rawTagPattern)
+        {
+            // TODO this only works if '*' can only be at the front/end/both, i.e. '*foo', 'foo*' or '*foo*'
+            // if wildcards '*' are allowed elsewhere, have to make it more complex!
+            var firstChar = tagPattern[0];
+            var lastChar = tagPattern[tagPattern.Length - 1];
+            if (firstChar == '*' && lastChar == '*')
+            {
+                // "anywhere" wildcard, i.e. "*foo*"
+                if (tagMatch.Contains(rawTagPattern))
+                    return true;
+            }
+            else if (lastChar == '*')
+            {
+                // "starts-with" or prefix search, i.e "foo*"
+                if (tagMatch.StartsWith(rawTagPattern))
+                    return true;
+            }
+            else if (firstChar == '*')
+            {
+                // "end-with" or suffix search, i.e "*foo"
+                if (tagMatch.EndsWith(rawTagPattern))
+                    return true;
+            }
+
+            return false;
+        }
+        
         private static bool IsWildCard(string tag)
         {
             return tag.Contains("*");

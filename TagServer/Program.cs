@@ -9,6 +9,8 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime;
 
+using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
+//using HashSet = System.Collections.Generic.HashSet<string>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
 
@@ -58,7 +60,7 @@ namespace StackOverflowTagServer
             TagServer tagServer = CreateTagServer(rawQuestions, createFromScratch: false, intermediateFilesFolder: folder);
 
             startupTimer.Stop();
-            Console.WriteLine("Took {0} (in total) to complete Startup\n", startupTimer.Elapsed);
+            Console.WriteLine("Took {0} (in total) to complete Startup", startupTimer.Elapsed);
             
             Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);            
             NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags.Keys, N: 3);            
@@ -159,35 +161,23 @@ namespace StackOverflowTagServer
             //                  leppieExpandTimer.ElapsedMilliseconds, tagsExpandedCounter, tagsToExpand.Count, allExpandedTags.Count);
         }
 
-        private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, List<string> leppieExpandedTags)
+        private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, HashSet leppieExpandedTags)
         {                       
             Console.WriteLine("\nThere are {0:N0} questions and {1:N0} tags in total", rawQuestions.Count, allTags.Count);
             Console.WriteLine("Leppie {0:N0} tags with wildcards expand to {1:N0} tags in total", leppieTags.Count, leppieExpandedTags.Count);
-            var expandedTagsHashSet = new CLR.HashSet<string>(leppieExpandedTags);
             var remainingTagsHashSet = new CLR.HashSet<string>(allTags.Keys);
             remainingTagsHashSet.ExceptWith(leppieExpandedTags);
-            Console.WriteLine("There are {0:N0} tags remaining ({0:N0} + {1:N0} = {2:N0} (Expected: {3:N0}))",
-                              remainingTagsHashSet.Count, expandedTagsHashSet.Count,
-                              remainingTagsHashSet.Count + expandedTagsHashSet.Count, allTags.Count);
+            Console.WriteLine("There are {0:N0} tags remaining, {0:N0} + {1:N0} = {2:N0} (Expected: {3:N0})",
+                              remainingTagsHashSet.Count, leppieExpandedTags.Count,
+                              remainingTagsHashSet.Count + leppieExpandedTags.Count, allTags.Count);
 
             Console.WriteLine("Sanity checking excluded/included tags and questions...");
-            var excludedQuestionCounter = 0;
-            foreach (var question in rawQuestions)
-            {
-                if (question.Tags.Any(t => expandedTagsHashSet.Contains(t)))
-                    excludedQuestionCounter++;
-            }
-
-            var includedQuestionCounter = 0;
-            foreach (var question in rawQuestions)
-            {
-                if (question.Tags.All(t => remainingTagsHashSet.Contains(t)))
-                    includedQuestionCounter++;
-            }
+            var excludedQuestionCounter = rawQuestions.Count(question => question.Tags.Any(t => leppieExpandedTags.Contains(t)));
+            var includedQuestionCounter = rawQuestions.Count(question => question.Tags.All(t => remainingTagsHashSet.Contains(t)));
             Console.WriteLine("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})", 
                               leppieExpandedTags.Count, excludedQuestionCounter, rawQuestions.Count);
             Console.WriteLine(
-                "{0:N0} remaining tags cover {1:N0} questions ({2:N0} + {3:N0} = {4:N0} (Expected: {5:N0}))",
+                "{0:N0} remaining tags cover {1:N0} questions, {2:N0} + {3:N0} = {4:N0} (Expected: {5:N0})",
                 remainingTagsHashSet.Count, includedQuestionCounter,
                 includedQuestionCounter, excludedQuestionCounter,
                 includedQuestionCounter + excludedQuestionCounter, rawQuestions.Count);
@@ -209,9 +199,11 @@ namespace StackOverflowTagServer
             return leppieTags;
         }
 
-        private static List<string> ProcessTagsForFastLookup(TagLookup allTags, Trie<int> trie, NGrams nGrams, List<string> tagsToExpand)
+        private static HashSet ProcessTagsForFastLookup(TagLookup allTags, Trie<int> trie, NGrams nGrams, List<string> tagsToExpand)
         {            
-            Console.WriteLine("\nThere are {0:N0} tags in total", allTags.Count);
+            var expandTagsContainsTimer = Stopwatch.StartNew();
+            var expandTagsContains = WildcardProcessor.ExpandTagsContainsStartsWithEndsWith(allTags, tagsToExpand);
+            expandTagsContainsTimer.Stop();
 
             var expandTagsVBTimer = Stopwatch.StartNew();
             var expandedTagsVB = WildcardProcessor.ExpandTagsVisualBasic(allTags, tagsToExpand);
@@ -219,7 +211,7 @@ namespace StackOverflowTagServer
 
             var expandTagsRegexTimer = Stopwatch.StartNew();
             var expandedTagsRegex = WildcardProcessor.ExpandTagsRegex(allTags, tagsToExpand);
-            expandTagsRegexTimer.Stop();          
+            expandTagsRegexTimer.Stop();
 
             var expandTagsTrieTimer = Stopwatch.StartNew();
             var expandedTagsTrie = WildcardProcessor.ExpandTagsTrie(allTags, tagsToExpand, trie);
@@ -229,30 +221,36 @@ namespace StackOverflowTagServer
             var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(allTags, tagsToExpand, nGrams);
             expandTagsRegexTimer.Stop();
 
+            Console.WriteLine("There are {0:N0} tags in total", allTags.Count);
             Console.WriteLine("There are {0:N0} tags (raw) BEFORE expansion", tagsToExpand.Count);
-            Console.WriteLine("Expanded to {0:N0} tags (VB),     took {1,8:N2} ms ({2})",
+            Console.WriteLine("Expanded to {0:N0} tags (Contains),  took {1,8:N2} ms ({2})",
+                  expandTagsContains.Count, expandTagsContainsTimer.Elapsed.TotalMilliseconds, expandTagsContainsTimer.Elapsed);
+            Console.WriteLine("Expanded to {0:N0} tags (VB),        took {1,8:N2} ms ({2})",
                             expandedTagsVB.Count, expandTagsVBTimer.Elapsed.TotalMilliseconds, expandTagsVBTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (Regex),  took {1,8:N2} ms ({2})",
+            Console.WriteLine("Expanded to {0:N0} tags (Regex),     took {1,8:N2} ms ({2})",
                             expandedTagsRegex.Count, expandTagsRegexTimer.Elapsed.TotalMilliseconds, expandTagsRegexTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (Trie),   took {1,8:N2} ms ({2})",
+            Console.WriteLine("Expanded to {0:N0} tags (Trie),      took {1,8:N2} ms ({2})",
                             expandedTagsTrie.Count, expandTagsTrieTimer.Elapsed.TotalMilliseconds, expandTagsTrieTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (NGrams), took {1,8:N2} ms ({2})",
+            Console.WriteLine("Expanded to {0:N0} tags (NGrams),    took {1,8:N2} ms ({2})",
                             expandedTagsNGrams.Count, expandedTagsNGramsTimer.Elapsed.TotalMilliseconds, expandedTagsNGramsTimer.Elapsed);
 
-            Console.WriteLine("\nIn Regex but not in VB: " + string.Join(", ", expandedTagsRegex.Except(expandedTagsVB)));
-            Console.WriteLine("\nIn VB but not in Regex: " + string.Join(", ", expandedTagsVB.Except(expandedTagsRegex)));
+            Console.WriteLine("\nIn Contains but not in Regex: " + string.Join(", ", expandTagsContains.Except(expandedTagsRegex)));
+            Console.WriteLine("\nIn Regex but not in Contains: " + string.Join(", ", expandedTagsRegex.Except(expandTagsContains)));
 
-            Console.WriteLine("\nIn Regex but not in Trie: " + string.Join(", ", expandedTagsRegex.Except(expandedTagsTrie)));
-            Console.WriteLine("\nIn Trie but not in Regex: " + string.Join(", ", expandedTagsTrie.Except(expandedTagsRegex)));
+            Console.WriteLine("\nIn Contains but not in VB: " + string.Join(", ", expandTagsContains.Except(expandedTagsVB)));
+            Console.WriteLine("\nIn VB but not in Contains: " + string.Join(", ", expandedTagsVB.Except(expandTagsContains)));
 
-            Console.WriteLine("\nIn Regex but not in NGrams: " + string.Join(", ", expandedTagsRegex.Except(expandedTagsNGrams)));
-            Console.WriteLine("\nIn NGrams but not in Regex: " + string.Join(", ", expandedTagsNGrams.Except(expandedTagsRegex)));
+            Console.WriteLine("\nIn Contains but not in Trie: " + string.Join(", ", expandTagsContains.Except(expandedTagsTrie)));
+            Console.WriteLine("\nIn Trie but not in Contains: " + string.Join(", ", expandedTagsTrie.Except(expandTagsContains)));
+
+            Console.WriteLine("\nIn Contains but not in NGrams: " + string.Join(", ", expandTagsContains.Except(expandedTagsNGrams)));
+            Console.WriteLine("\nIn NGrams but not in Contains: " + string.Join(", ", expandedTagsNGrams.Except(expandTagsContains)));
             Console.WriteLine();            
 
-            var expandedTags = expandedTagsTrie;
+            var expandedTags = expandedTagsNGrams;
             //Console.WriteLine(string.Join(", ", expandedTags));
 
-            // This is an error, we should've have extra tags that aren't in the "allTags" list!!
+            // This is an error, we shouldn't have extra tags that aren't in the "allTags" list!!
             var extra = expandedTags.Except(allTags.Keys).ToList();
             if (extra.Count > 0)
                 Console.WriteLine("\nExtra Tags: " + string.Join(", ", extra) + "\n");            
@@ -323,7 +321,7 @@ namespace StackOverflowTagServer
             //Console.WriteLine();
         }
 
-        private static void RunExclusionQueryTests(TagServer tagServer, List<string> expandedTags, int runsPerLoop)
+        private static void RunExclusionQueryTests(TagServer tagServer, HashSet expandedTags, int runsPerLoop)
         {
             Results.CreateNewFile(string.Format("Results-{0}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss")));
             //Results.AddHeaders("Count", "Fast", "Fast Alt", "Bloom");
@@ -345,7 +343,7 @@ namespace StackOverflowTagServer
                 foreach (var count in amounts)
                 {
                     var pageSize = 50;
-                    var excludedTags = SelectNItemsFromList(expandedTags, count);
+                    var excludedTags = SelectNItemsFromList(expandedTags.ToList(), count);
                     //Console.WriteLine("Count={0}, excludedTags.Count={1} tags:{2}\n\n", count, excludedTags.Count, string.Join(", ", excludedTags));
                     //continue;
 
