@@ -11,9 +11,9 @@ namespace StackOverflowTagServer
         {
             var directory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             var fileStream = new FileStream(Path.Combine(directory, filename),
-                                    mode: FileMode.Create,
-                                    access: FileAccess.ReadWrite,
-                                    share: FileShare.ReadWrite);
+                                            mode: FileMode.Create,
+                                            access: FileAccess.ReadWrite,
+                                            share: FileShare.ReadWrite);
             stream = new StreamWriter(fileStream);
         }
 

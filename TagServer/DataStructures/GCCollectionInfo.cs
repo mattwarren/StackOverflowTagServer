@@ -38,7 +38,7 @@ namespace StackOverflowTagServer.DataStructures
         public IGCInfo InitialValues { get; private set; }
         public IGCInfo Count { get; private set; }
 
-        private bool Collected = false;
+        private bool _collected = false;
 
         public GCCollectionInfo()
         {
@@ -53,12 +53,12 @@ namespace StackOverflowTagServer.DataStructures
                 GC.CollectionCount(1) - InitialValues.Gen1,
                 GC.CollectionCount(2) - InitialValues.Gen2);
 
-            Collected = true;
+            _collected = true;
         }
 
         public override string ToString()
         {
-            if (Collected == false)
+            if (_collected == false)
                 return "UpdateCollectionInfo() has not been called, no intermediateResults to display";
 
             return string.Format(

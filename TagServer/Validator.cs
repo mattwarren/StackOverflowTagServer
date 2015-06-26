@@ -1,16 +1,14 @@
 ﻿using Shared;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text;
 
 namespace StackOverflowTagServer
 {
     class Validator
     {
-        private List<Question> questions;
-        private TagServer.LogAction Log;
+        private readonly List<Question> questions;
+        private readonly TagServer.LogAction Log;
 
         public Validator(List<Question> questions, TagServer.LogAction log)
         {
@@ -34,7 +32,7 @@ namespace StackOverflowTagServer
                         if (!result)
                         {
                             Log("Failed with Id {0}, Tag {1}, checker() returned false", id, tag.Key);
-                            var test = tag.Value.Select(t => questions[t]).ToList();
+                            //var test = tag.Value.Select(t => questions[t]).ToList();
                             //System.Diagnostics.Debugger.Launch();
                             break;
                         }

@@ -1,5 +1,4 @@
-﻿
-namespace StackOverflowTagServer.DataStructures
+﻿namespace StackOverflowTagServer.DataStructures
 {
     public enum QueryType
     {
