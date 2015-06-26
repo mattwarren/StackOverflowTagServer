@@ -7,14 +7,17 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
+using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
+using TagLookup = System.Collections.Generic.Dictionary<string, int>;
+
 namespace StackOverflowTagServer
 {
     public class TagServer
     {
         public delegate void LogAction(string format, params object[] args);
 
-        private readonly Dictionary<string, int> allTags;
-        public Dictionary<string, int> AllTags { get { return allTags; } }
+        private readonly TagLookup allTags;
+        public TagLookup AllTags { get { return allTags; } }
 
         private readonly List<Question> questions;
         public List<Question> Questions { get { return questions; } }
@@ -25,11 +28,11 @@ namespace StackOverflowTagServer
         private readonly Dictionary<string, List<KeyValuePair<string, int>>> relatedTags;
 
         // GetQueryTypeInfo(QueryType type) Maps these Dictionaries to a QueryType (enum)
-        private readonly Dictionary<string, int[]> tagsByAnswerCount;
-        private readonly Dictionary<string, int[]> tagsByCreationDate;
-        private readonly Dictionary<string, int[]> tagsByLastActivityDate;
-        private readonly Dictionary<string, int[]> tagsByScore;
-        private readonly Dictionary<string, int[]> tagsByViewCount;
+        private readonly TagByQueryLookup tagsByAnswerCount;
+        private readonly TagByQueryLookup tagsByCreationDate;
+        private readonly TagByQueryLookup tagsByLastActivityDate;
+        private readonly TagByQueryLookup tagsByScore;
+        private readonly TagByQueryLookup tagsByViewCount;
 
         private readonly QueryProcessor queryProcessor;
 
@@ -43,11 +46,11 @@ namespace StackOverflowTagServer
 
             allTags = groupedTags.ToDictionary(t => t.Key, t => t.Value.Count);
 
-            tagsByLastActivityDate = new Dictionary<string, int[]>(groupedTags.Count);
-            tagsByCreationDate = new Dictionary<string, int[]>(groupedTags.Count);
-            tagsByScore = new Dictionary<string, int[]>(groupedTags.Count);
-            tagsByViewCount = new Dictionary<string, int[]>(groupedTags.Count);
-            tagsByAnswerCount = new Dictionary<string, int[]>(groupedTags.Count);
+            tagsByLastActivityDate = new TagByQueryLookup(groupedTags.Count);
+            tagsByCreationDate = new TagByQueryLookup(groupedTags.Count);
+            tagsByScore = new TagByQueryLookup(groupedTags.Count);
+            tagsByViewCount = new TagByQueryLookup(groupedTags.Count);
+            tagsByAnswerCount = new TagByQueryLookup(groupedTags.Count);
 
             CreateSortedLists(groupedTags);
 
@@ -57,8 +60,7 @@ namespace StackOverflowTagServer
             ValidateTagOrdering();
         }
 
-        internal TagServer(List<Question> questionsList, Dictionary<string, int> allTags, 
-                           Dictionary<QueryType, Dictionary<string, int[]>> intermediateValues)
+        internal TagServer(List<Question> questionsList, TagLookup allTags, Dictionary<QueryType, TagByQueryLookup> intermediateValues)
         {
             questions = questionsList;
             queryProcessor = new QueryProcessor(questions, type => GetQueryTypeInfo(type));
@@ -97,7 +99,7 @@ namespace StackOverflowTagServer
 
         public int TotalCount(QueryType type, string tag)
         {
-            Dictionary<string, int[]> queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             return queryInfo[tag].Length;
         }
 
@@ -131,9 +133,9 @@ namespace StackOverflowTagServer
             return queryProcessor.BooleanQueryWithExclusionsBloomFilterVersion(type, tag, excludedTags, pageSize, skip);
         }
 
-        public Dictionary<string, int[]> GetQueryTypeInfo(QueryType type)
+        public TagByQueryLookup GetQueryTypeInfo(QueryType type)
         {
-            Dictionary<string, int[]> queryInfo;
+            TagByQueryLookup queryInfo;
             switch (type)
             {
                 case QueryType.LastActivityDate:
@@ -161,10 +163,10 @@ namespace StackOverflowTagServer
         {
             var memoryBefore = GC.GetTotalMemory(true);
             var relatedTagsTimer = Stopwatch.StartNew();
-            var relatedTagsTemp = new Dictionary<string, Dictionary<string, int>>(groupedTags.Count);
+            var relatedTagsTemp = new Dictionary<string, TagLookup>(groupedTags.Count);
             foreach (var tag in groupedTags)
             {
-                relatedTagsTemp.Add(tag.Key, new Dictionary<string, int>());
+                relatedTagsTemp.Add(tag.Key, new TagLookup());
             }
             foreach (var question in questions)
             {

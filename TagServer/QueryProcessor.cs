@@ -5,17 +5,18 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Threading;
+
 using HashSet = StackOverflowTagServer.CLR.HashSet<int>;
 //using HashSet = System.Collections.Generic.HashSet<int>;
+using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 
 namespace StackOverflowTagServer
 {
     internal class QueryProcessor
     {
         private readonly List<Question> questions;
-        private readonly Func<QueryType, Dictionary<string, int[]>> GetQueryTypeInfo;
+        private readonly Func<QueryType, TagByQueryLookup> GetQueryTypeInfo;
 
         private readonly Lazy<HashSet> HashSetCache = new Lazy<HashSet>(() => 
             {
@@ -27,7 +28,7 @@ namespace StackOverflowTagServer
             },
             LazyThreadSafetyMode.ExecutionAndPublication);
 
-        internal QueryProcessor(List<Question> questions, Func<QueryType, Dictionary<string, int[]>> getQueryTypeInfo)
+        internal QueryProcessor(List<Question> questions, Func<QueryType, TagByQueryLookup> getQueryTypeInfo)
         {
             this.questions = questions;
             this.GetQueryTypeInfo = getQueryTypeInfo;
@@ -36,7 +37,7 @@ namespace StackOverflowTagServer
         internal List<Question> Query(QueryType type, string tag, int pageSize, int skip)
         {
             var timer = Stopwatch.StartNew();
-            Dictionary<string, int[]> queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -63,7 +64,7 @@ namespace StackOverflowTagServer
         internal List<Question> ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip)
         {
             var timer = Stopwatch.StartNew();
-            Dictionary<string, int[]> queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
             ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
@@ -112,7 +113,7 @@ namespace StackOverflowTagServer
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
 
-            Dictionary<string, int[]> queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -152,7 +153,7 @@ namespace StackOverflowTagServer
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
 
-            Dictionary<string, int[]> queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -199,7 +200,7 @@ namespace StackOverflowTagServer
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
 
-            Dictionary<string, int[]> queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -258,7 +259,7 @@ namespace StackOverflowTagServer
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
 
-            Dictionary<string, int[]> queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -403,7 +404,7 @@ namespace StackOverflowTagServer
             return fieldSelector;
         }
 
-        private void ThrowIfInvalidParameters(string tag, int pageSize, Dictionary<string, int[]> queryInfo)
+        private void ThrowIfInvalidParameters(string tag, int pageSize, TagByQueryLookup queryInfo)
         {
             if (string.IsNullOrWhiteSpace(tag) || queryInfo.ContainsKey(tag) == false)
                 throw new InvalidOperationException(string.Format("Invalid tag specified: {0}", tag ?? "<NULL>"));

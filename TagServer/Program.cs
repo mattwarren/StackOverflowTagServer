@@ -9,6 +9,9 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime;
 
+using TagLookup = System.Collections.Generic.Dictionary<string, int>;
+using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
+
 namespace StackOverflowTagServer
 {
 // ReSharper disable LocalizableElement
@@ -21,7 +24,21 @@ namespace StackOverflowTagServer
             var folder = @"C:\Users\warma11\Downloads\__GitHub__\StackOverflowTagServer\BinaryData\";
             //var filename = @"Questions.bin";
             var filename = @"Questions-NEW.bin";
-            //var filename = @"Questions-subset.bin";            
+            //var filename = @"Questions-subset.bin";
+
+            //var allTagsFilename = "intermediate-AllTags.bin";
+            //TagLookup allTags;
+            //using (var file = File.OpenRead(Path.Combine(folder, allTagsFilename)))
+            //{
+            //    allTags = Serializer.Deserialize<TagLookup>(file);
+            //}
+            
+            //var nGrams = WildcardProcessor.CreateNGramsForIndexing(allTags.Keys, N: 3);
+
+            // <.net> and <c#> aren't in this lists, so they can be valid tags!            
+            var leppieTags = GetLeppieTagsFromResource();
+
+            //TestWithNGrams(allTags, nGrams, leppieTags);
 
             var startupTimer = Stopwatch.StartNew();
             List<Question> rawQuestions;
@@ -36,24 +53,29 @@ namespace StackOverflowTagServer
             var memoryAfter = GC.GetTotalMemory(true);
             Console.WriteLine("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from the file, used {2:0.00} MB of memory\n",
                                 fileReadTimer.Elapsed, rawQuestions.Count, (memoryAfter - memoryBefore) / 1024.0 / 1024.0);
-
+           
             //TagServer tagServer = CreateTagServer(rawQuestions, createFromScratch: true, intermediateFilesFolder: folder);
             TagServer tagServer = CreateTagServer(rawQuestions, createFromScratch: false, intermediateFilesFolder: folder);
 
             startupTimer.Stop();
             Console.WriteLine("Took {0} (in total) to complete Startup\n", startupTimer.Elapsed);
             
-            Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);
+            Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);            
+            NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags.Keys, N: 3);            
+
+            var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
+
             // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
-            var result = GetLeppieTagInfo(rawQuestions, tagServer.AllTags, trie);
-            //var leppieRawTags = result.Item1;
-            var leppieExpandedTags = result.Item2;
+            GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
 
-            //List<string> leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, tagsToExpand: leppieRawTags);            
-            TestTagWildcardExpansion(tagServer.AllTags, trie);
-            
-            return;            
+            //List<string> leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, tagsToExpand: leppieTags);
+            //TestTagWildcardExpansion(tagServer.AllTags, trie); 
 
+            //TestWithNGrams(tagServer.AllTags, leppieTags);
+
+            return;
+
+#region QueryTestingCode
             //var queryTester = new QueryTester(tagServer.Questions);
             //queryTester.TestAndOrNotQueries();
             //queryTester.TestQueries();
@@ -104,29 +126,46 @@ namespace StackOverflowTagServer
 
             Console.WriteLine("Finished, press <ENTER> to exit");
             Console.ReadLine();
-        }        
+#endregion
+        }
 
-        private static Tuple<List<string>, List<string>> GetLeppieTagInfo(
-                    List<Question> rawQuestions, Dictionary<string, int> allTags, Trie<int> trie)
-        {           
-            // <.net> and <c#> aren't in this lists, so they can be valid tags!
-            var resourceStream = GetStream("leppie - excluded tags.txt");
-            var leppieTags = new List<string>();
-            if (resourceStream != null)
-            {
-                var fileStream = new StreamReader(resourceStream);
-                string line;
-                while ((line = fileStream.ReadLine()) != null)
-                    leppieTags.Add(line);
-                //Console.WriteLine(string.Join(", ", tagsToExpand));
-            }
+        private static void TestWithNGrams(TagLookup allTags, NGrams nGrams, List<string> tagsToExpand)
+        {
+            //var sampleTags = new List<string>(new[]
+            //    {
+            //        ".net", "c#", "c#-4.0", "c#-5.0", "java", "nhibernate", "hibernate", "java-8", "java-7"
+            //    });
+            //var ngrams = WildcardProcessor.CreateNGramsForIndexing(sampleTags, N: 3);
+            //Console.WriteLine("Tri-grams (n-grams):");
+            //foreach (var ngram in ngrams)
+            //{
+            //    Console.WriteLine("\t{0}: {1}", ngram.Key, String.Join(", ", ngram.Value.Select(i => sampleTags[i])));
+            //}
+            //return;
 
-            var expandedTags = ProcessTagsForFastLookup(allTags, trie, leppieTags);
+            //Console.WriteLine("Tri-grams (n-grams):");
+            //foreach (var ngram in nGrams)
+            //{
+            //    Console.WriteLine("\t{0}: {1}", ngram.Key, String.Join(", ", ngram.Value.Select(i => tagServer.AllTags.ElementAt(i))));
+            //}
+            //Console.WriteLine("Took {0} to create {1} n-grams\n", nGrams.Count, nGramsTimer.Elapsed);
+
+            //var leppieExpandTimer = Stopwatch.StartNew();
+            //var allTagsList = allTags.Keys.ToList();
+            //int tagsExpandedCounter;
+            //var allExpandedTags = WildcardProcessor.ExpandTagsNGrams(allTags: allTagsList, tagsToExpand: tagsToExpand, nGrams: nGrams);
+            //leppieExpandTimer.Stop();
+            //Console.WriteLine("\nTook {0} ({1,5:N0} ms) to expand {2} items (out of {3}) to {4} Tags\n", leppieExpandTimer.Elapsed,
+            //                  leppieExpandTimer.ElapsedMilliseconds, tagsExpandedCounter, tagsToExpand.Count, allExpandedTags.Count);
+        }
+
+        private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, List<string> leppieExpandedTags)
+        {                       
             Console.WriteLine("\nThere are {0:N0} questions and {1:N0} tags in total", rawQuestions.Count, allTags.Count);
-            Console.WriteLine("Leppie {0:N0} tags with wildcards expand to {1:N0} tags in total", leppieTags.Count, expandedTags.Count);
-            var expandedTagsHashSet = new CLR.HashSet<string>(expandedTags);
+            Console.WriteLine("Leppie {0:N0} tags with wildcards expand to {1:N0} tags in total", leppieTags.Count, leppieExpandedTags.Count);
+            var expandedTagsHashSet = new CLR.HashSet<string>(leppieExpandedTags);
             var remainingTagsHashSet = new CLR.HashSet<string>(allTags.Keys);
-            remainingTagsHashSet.ExceptWith(expandedTags);
+            remainingTagsHashSet.ExceptWith(leppieExpandedTags);
             Console.WriteLine("There are {0:N0} tags remaining ({0:N0} + {1:N0} = {2:N0} (Expected: {3:N0}))",
                               remainingTagsHashSet.Count, expandedTagsHashSet.Count,
                               remainingTagsHashSet.Count + expandedTagsHashSet.Count, allTags.Count);
@@ -145,19 +184,32 @@ namespace StackOverflowTagServer
                 if (question.Tags.All(t => remainingTagsHashSet.Contains(t)))
                     includedQuestionCounter++;
             }
-            Console.WriteLine("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})", expandedTags.Count,
-                              excludedQuestionCounter, rawQuestions.Count);
+            Console.WriteLine("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})", 
+                              leppieExpandedTags.Count, excludedQuestionCounter, rawQuestions.Count);
             Console.WriteLine(
                 "{0:N0} remaining tags cover {1:N0} questions ({2:N0} + {3:N0} = {4:N0} (Expected: {5:N0}))",
                 remainingTagsHashSet.Count, includedQuestionCounter,
                 includedQuestionCounter, excludedQuestionCounter,
                 includedQuestionCounter + excludedQuestionCounter, rawQuestions.Count);
             Console.WriteLine();
-
-            return Tuple.Create(leppieTags, expandedTags);
         }
-          
-        private static List<string> ProcessTagsForFastLookup(Dictionary<string, int> allTags, Trie<int> trie, List<string> tagsToExpand)
+
+        private static List<string> GetLeppieTagsFromResource()
+        {
+            var leppieTags = new List<string>();
+            var resourceStream = GetStream("leppie - excluded tags.txt");
+            if (resourceStream != null)
+            {
+                var fileStream = new StreamReader(resourceStream);
+                string line;
+                while ((line = fileStream.ReadLine()) != null)
+                    leppieTags.Add(line);
+                //Console.WriteLine(string.Join(", ", tagsToExpand));
+            }
+            return leppieTags;
+        }
+
+        private static List<string> ProcessTagsForFastLookup(TagLookup allTags, Trie<int> trie, NGrams nGrams, List<string> tagsToExpand)
         {            
             Console.WriteLine("\nThere are {0:N0} tags in total", allTags.Count);
 
@@ -173,18 +225,28 @@ namespace StackOverflowTagServer
             var expandedTagsTrie = WildcardProcessor.ExpandTagsTrie(allTags, tagsToExpand, trie);
             expandTagsTrieTimer.Stop();
 
+            var expandedTagsNGramsTimer = Stopwatch.StartNew();
+            var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(allTags, tagsToExpand, nGrams);
+            expandTagsRegexTimer.Stop();
+
             Console.WriteLine("There are {0:N0} tags (raw) BEFORE expansion", tagsToExpand.Count);
-            Console.WriteLine("Expanded to {0:N0} tags (VB),    took {1,8:N2} ms ({2})",
+            Console.WriteLine("Expanded to {0:N0} tags (VB),     took {1,8:N2} ms ({2})",
                             expandedTagsVB.Count, expandTagsVBTimer.Elapsed.TotalMilliseconds, expandTagsVBTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (Regex), took {1,8:N2} ms ({2})",
+            Console.WriteLine("Expanded to {0:N0} tags (Regex),  took {1,8:N2} ms ({2})",
                             expandedTagsRegex.Count, expandTagsRegexTimer.Elapsed.TotalMilliseconds, expandTagsRegexTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (Trie),  took {1,8:N2} ms ({2})",
+            Console.WriteLine("Expanded to {0:N0} tags (Trie),   took {1,8:N2} ms ({2})",
                             expandedTagsTrie.Count, expandTagsTrieTimer.Elapsed.TotalMilliseconds, expandTagsTrieTimer.Elapsed);
+            Console.WriteLine("Expanded to {0:N0} tags (NGrams), took {1,8:N2} ms ({2})",
+                            expandedTagsNGrams.Count, expandedTagsNGramsTimer.Elapsed.TotalMilliseconds, expandedTagsNGramsTimer.Elapsed);
 
             Console.WriteLine("\nIn Regex but not in VB: " + string.Join(", ", expandedTagsRegex.Except(expandedTagsVB)));
             Console.WriteLine("\nIn VB but not in Regex: " + string.Join(", ", expandedTagsVB.Except(expandedTagsRegex)));
+
             Console.WriteLine("\nIn Regex but not in Trie: " + string.Join(", ", expandedTagsRegex.Except(expandedTagsTrie)));
             Console.WriteLine("\nIn Trie but not in Regex: " + string.Join(", ", expandedTagsTrie.Except(expandedTagsRegex)));
+
+            Console.WriteLine("\nIn Regex but not in NGrams: " + string.Join(", ", expandedTagsRegex.Except(expandedTagsNGrams)));
+            Console.WriteLine("\nIn NGrams but not in Regex: " + string.Join(", ", expandedTagsNGrams.Except(expandedTagsRegex)));
             Console.WriteLine();            
 
             var expandedTags = expandedTagsTrie;
@@ -198,7 +260,7 @@ namespace StackOverflowTagServer
             return expandedTags;
         }
 
-        private static void TestTagWildcardExpansion(Dictionary<string, int> allTags, Trie<int> trie)
+        private static void TestTagWildcardExpansion(TagLookup allTags, Trie<int> trie)
         {
             var test = new[] {"*js"}.ToList();
             var results = WildcardProcessor.ExpandTagsTrie(allTags, test, trie);
@@ -406,11 +468,10 @@ namespace StackOverflowTagServer
                         File.Delete(rttFilename);
                     using (var file = File.OpenWrite(rttFilename))
                     {
-                        Console.WriteLine("Serialising to: " + "intermediate-" + type + ".bin");
                         Serializer.Serialize(file, tagServer.GetQueryTypeInfo(type));
                     }
                     itemTimer.Stop();
-                    Console.WriteLine("Took {0}", itemTimer.Elapsed);
+                    Console.WriteLine("Took {0} to serialise to: {1}", itemTimer.Elapsed, "intermediate-" + type + ".bin");
                 }
 
                 itemTimer = Stopwatch.StartNew();
@@ -418,11 +479,10 @@ namespace StackOverflowTagServer
                     File.Delete(allTagsFilePath);
                 using (var file = File.OpenWrite(allTagsFilePath))
                 {
-                    Console.WriteLine("Serialising to: " + allTagsFilename);
                     Serializer.Serialize(file, tagServer.AllTags);
                 }
                 itemTimer.Stop();
-                Console.WriteLine("Took {0}", itemTimer.Elapsed);
+                Console.WriteLine("Took {0} to serialise to: {1}", itemTimer.Elapsed, allTagsFilename);
 
                 serializeTimer.Stop();
                 Console.WriteLine("\nTook {0} (in TOTAL) to serialise the intermediate data TO disk\n", serializeTimer.Elapsed);
@@ -431,7 +491,7 @@ namespace StackOverflowTagServer
             {
                 var queryTypes = (QueryType[])Enum.GetValues(typeof(QueryType));
                 var intermediateResults = new Dictionary<QueryType, Dictionary<string, int[]>>(queryTypes.Length);
-                var allTags = new Dictionary<string, int>();
+                var allTags = new TagLookup();
                 var deserializeTimer = Stopwatch.StartNew();
 
                 Stopwatch itemTimer;
@@ -442,22 +502,20 @@ namespace StackOverflowTagServer
                     itemTimer = Stopwatch.StartNew();
                     using (var file = File.OpenRead(rttFilename))
                     {
-                        Console.WriteLine("Deserialising from: " + "intermediate-" + type + ".bin");
                         var rttTest = Serializer.Deserialize<Dictionary<string, int[]>>(file);
                         intermediateResults.Add(type, rttTest);
                     }
                     itemTimer.Stop();
-                    Console.WriteLine("Took {0}", itemTimer.Elapsed);
+                    Console.WriteLine("Took {0} to deserialise from: {1}", itemTimer.Elapsed, "intermediate-" + type + ".bin");
                 }
 
                 itemTimer = Stopwatch.StartNew();
                 using (var file = File.OpenRead(allTagsFilePath))
                 {
-                    Console.WriteLine("Deserialising from: " + allTagsFilename);
-                    allTags = Serializer.Deserialize<Dictionary<string, int>>(file);
+                    allTags = Serializer.Deserialize<TagLookup>(file);
                 }
                 itemTimer.Stop();
-                Console.WriteLine("Took {0}", itemTimer.Elapsed);
+                Console.WriteLine("Took {0} to deserialise from: {1}", itemTimer.Elapsed, allTagsFilename);
 
                 deserializeTimer.Stop();
                 Console.WriteLine("\nTook {0} (in TOTAL) to DE-serialise the intermediate data FROM disk\n", deserializeTimer.Elapsed);
