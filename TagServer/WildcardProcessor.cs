@@ -46,7 +46,7 @@ namespace StackOverflowTagServer
             return trie;
         }
 
-        internal static NGrams CreateNGrams(IEnumerable<string> allTags, int N)
+        internal static NGrams CreateNGrams(TagLookup allTags, int N)
         {
             // From https://swtch.com/~rsc/regexp/regexp4.html, 
             // Continuing the example from the last section, the document set:
@@ -68,8 +68,9 @@ namespace StackOverflowTagServer
 
             var nGramsTimer = Stopwatch.StartNew();
             var allNGrams = new NGrams();
-            foreach (var item in allTags.Select((tag, posn) => new { Tag = tag, Posn = posn }))
+            foreach (var item in allTags.Select((item, posn) => new { Tag = item.Key, Posn = posn }))
             {
+                // TODO only use .ToList() here because we call .Count, if that was removed, we could lose the ToList() call
                 var nGrams = CreateNGramsForIndexing(item.Tag, N).ToList();
                 //var expected = Math.Max(1, item.Tag.Length - N + 1);
                 var expected = Math.Max(1, item.Tag.Length - N + 1 + 2);
@@ -112,10 +113,9 @@ namespace StackOverflowTagServer
                             expandedTags.Add(tag);
                     }
                 }
-                else
+                else if (allTags.ContainsKey(tagToExpand))
                 {
-                    if (allTags.ContainsKey(tagToExpand))
-                        expandedTags.Add(tagToExpand);
+                    expandedTags.Add(tagToExpand);
                 }
             }
 
@@ -141,10 +141,9 @@ namespace StackOverflowTagServer
                         }
                     }
                 }
-                else
+                else if (allTags.ContainsKey(tagToExpand))
                 {
-                    if (allTags.ContainsKey(tagToExpand))
-                        expandedTags.Add(tagToExpand);
+                    expandedTags.Add(tagToExpand);
                 }
             }
 
@@ -153,39 +152,27 @@ namespace StackOverflowTagServer
 
         internal static HashSet ExpandTagsRegex(TagLookup allTags, List<string> tagsToExpand)
         {
-            // See http://www.c-sharpcorner.com/uploadfile/b81385/efficient-string-matching-algorithm-with-use-of-wildcard-characters/
-            // or http://www.henrikbrinch.dk/Blog/2013/03/07/Wildcard-Matching-In-C-Using-Regular-Expressions
             var expandedTags = new HashSet();
             //var wierdMatches = new[] { "access-vba", "word-vba", "microsoft-project-vba", "visio-vba", "xmlhttp-vba" };
-            var wierdMatches = new[] { "cakephp", "node-postgres", "libsvm", "rsolr" };
+            //var wierdMatches = new[] { "cakephp", "node-postgres", "libsvm", "rsolr" };
             foreach (var tagToExpand in tagsToExpand)
             {
                 if (IsWildCard(tagToExpand))
                 {
+                    // See http://www.c-sharpcorner.com/uploadfile/b81385/efficient-string-matching-algorithm-with-use-of-wildcard-characters/
+                    // or http://www.henrikbrinch.dk/Blog/2013/03/07/Wildcard-Matching-In-C-Using-Regular-Expressions
                     var regexPattern = "^" + Regex.Escape(tagToExpand).Replace("\\*", ".*") + "$";
-                    Regex regex = new Regex(regexPattern, RegexOptions.Compiled);
+                    var regex = new Regex(regexPattern, RegexOptions.Compiled);
                     foreach (var tag in allTags.Keys)
                     {
                         if (!regex.IsMatch(tag)) 
                             continue;
-
                         expandedTags.Add(tag);
-
-                        //Added "access-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                        //Added "word-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                        //Added "microsoft-project-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                        //Added "visio-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                        //Added "xmlhttp-vba", tagToExpand = "*-vba", regex pattern = ^.*-vba$
-                        //if (wierdMatches.Contains(tag))
-                        //{
-                        //    Console.WriteLine("Added \"{0}\", tagToExpand = \"{1}\", regex pattern = {2}", tag, tagToExpand, regexPattern);
-                        //}
                     }
                 }
-                else
+                else if (allTags.ContainsKey(tagToExpand))
                 {
-                    if (allTags.ContainsKey(tagToExpand))
-                        expandedTags.Add(tagToExpand);
+                   expandedTags.Add(tagToExpand);
                 }
             }
 
@@ -197,50 +184,60 @@ namespace StackOverflowTagServer
             // It *seems* like SO only allows prefix, suffix or both, i.e. "java*", "*-vba", "*java*"
             // But not anything else like "ja*a", or "j?va?", etc
             var expandedTags = new HashSet();
+            var bruteForceTimer = new Stopwatch(); 
             foreach (var tagToExpand in tagsToExpand)
             {
                 if (IsWildCard(tagToExpand) == false)
                 {
-                    int value;
-                    if (trie.TryGetValue(tagToExpand, out value))
-                        expandedTags.Add(tagToExpand);
-                }
-                else
-                {
-                    var firstChar = tagToExpand[0];
-                    var lastChar = tagToExpand[tagToExpand.Length - 1];
-                    if (firstChar == '*' && lastChar == '*')
-                    {
-                        var actualTag = tagToExpand.Substring(1, tagToExpand.Length - 2);
-                        if (useNewMode)
-                        {
-                            DoStartsWithSearch(trie, actualTag + "*", expandedTags);
-                            DoEndsWithSearch(trie, "*" + actualTag, expandedTags);
-                        }
-                        else
-                        {
-                            DoStartsWithOrEndsWithSearch(trie, tagToExpand, expandedTags);
-                        }
+                    // With this mechanism Trie expansion takes 120.27 ms (00:00:00.1202737)
+                    //int value;
+                    //if (trie.TryGetValue(tagToExpand, out value))
+                    //    expandedTags.Add(tagToExpand);
 
-                        // TODO is there a better way to deal with *php*, i.e. matching in the middle of this string, 
-                        // The method below is to do a brute-force search, so kills our perf a bit!!!!
-                        // If we don't do this, we miss items that are in the middle i.e. *php* won't match "cakephp-1.0"
-                        foreach (var tag in allTags)
-                        {
-                            if (tag.Key.Contains(actualTag) && expandedTags.Contains(tag.Key) == false)
-                                expandedTags.Add(tag.Key);
-                        }
-                    }
-                    else if (lastChar == '*')
+                    // With this mechanism Trie expansion takes 120.50 ms (00:00:00.1204961)
+                    if (allTags.ContainsKey(tagToExpand))
+                        expandedTags.Add(tagToExpand);
+
+                    continue;
+                }
+
+                var firstChar = tagToExpand[0];
+                var lastChar = tagToExpand[tagToExpand.Length - 1];
+                if (firstChar == '*' && lastChar == '*')
+                {
+                    var actualTag = tagToExpand.Substring(1, tagToExpand.Length - 2);
+                    if (useNewMode)
                     {
-                        DoStartsWithSearch(trie, tagToExpand, expandedTags);
+                        DoStartsWithSearch(trie, actualTag + "*", expandedTags);
+                        DoEndsWithSearch(trie, "*" + actualTag, expandedTags);
                     }
-                    else if (firstChar == '*')
+                    else
                     {
-                        DoEndsWithSearch(trie, tagToExpand, expandedTags);
+                        DoStartsWithOrEndsWithSearch(trie, tagToExpand, expandedTags);
                     }
+
+                    // TODO is there a better way to deal with *php*, i.e. matching in the middle of this string, 
+                    // The method below is to do a brute-force search, so kills our perf a bit!!!!
+                    // If we don't do this, we miss items that are in the middle i.e. *php* won't match "cakephp-1.0"
+                    bruteForceTimer.Start();                  
+                    foreach (var tag in allTags)
+                    {
+                        if (tag.Key.Contains(actualTag) && expandedTags.Contains(tag.Key) == false)
+                            expandedTags.Add(tag.Key);
+                    }
+                    bruteForceTimer.Stop();
+                }
+                else if (lastChar == '*')
+                {
+                    DoStartsWithSearch(trie, tagToExpand, expandedTags);
+                }
+                else if (firstChar == '*')
+                {
+                    DoEndsWithSearch(trie, tagToExpand, expandedTags);
                 }
             }
+
+            Console.WriteLine("Took {0} ({1,5:N0} ms) for Trie expansion to do brute force searches", bruteForceTimer.Elapsed, bruteForceTimer.ElapsedMilliseconds);
 
             return expandedTags;
         }

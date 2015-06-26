@@ -63,7 +63,7 @@ namespace StackOverflowTagServer
             Console.WriteLine("Took {0} (in total) to complete Startup", startupTimer.Elapsed);
             
             Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);            
-            NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags.Keys, N: 3);            
+            NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags, N: 3);            
 
             var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
 
