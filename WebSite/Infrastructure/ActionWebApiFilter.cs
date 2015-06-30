@@ -1,10 +1,8 @@
 ﻿using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
@@ -33,17 +31,42 @@ namespace Server.Infrastructure
             //    var value = objectContent.Value; //holding the returned value
             //}
 
-            Trace.WriteLine(string.Format("Request:   {0}", actionExecutedContext.Request.RequestUri.ToString()));
-            Trace.WriteLine(string.Format("    Took {0} ({1:N2} msecs)", Timer.Value.Elapsed, Timer.Value.Elapsed.TotalMilliseconds));
-            var response = await actionExecutedContext.Response.Content.ReadAsStringAsync();
-            var headers = actionExecutedContext.Response.Content.Headers;
-            Trace.WriteLine(string.Format("    Headers: {0}", string.Join(", ", headers.Select(h => new { h.Key, Values = String.Join(", ", h.Value) }))));
-
             var fileName = "Response-" + Guid.NewGuid() + ".json";
             var dataFolder = HttpContext.Current.Server.MapPath("~/Data");
-            Trace.WriteLine(string.Format("    Contents saved as {0}", fileName));
+            var response = "";
             try
             {
+                Trace.WriteLine(String.Format("Request:   {0}", actionExecutedContext.Request.RequestUri.ToString()));
+                Trace.WriteLine(String.Format("    Took {0} ({1:N2} msecs)", Timer.Value.Elapsed, Timer.Value.Elapsed.TotalMilliseconds));
+                if (actionExecutedContext == null)
+                {
+                    Trace.WriteLine("\"actionExecutedContext\" is null, unable to get the response");
+                    return;
+                }
+                if (actionExecutedContext.Response == null)
+                {
+                    Trace.WriteLine("\"actionExecutedContext.Response\" is null, unable to get the response");
+                    return;
+                }
+                if (actionExecutedContext.Response.Content == null)
+                {
+                    Trace.WriteLine("\"actionExecutedContext.Response.Content\" is null, unable to get the response");
+                    return;
+                }
+
+                response = await actionExecutedContext.Response.Content.ReadAsStringAsync();
+                if (response != null)
+                {
+                    var headers = actionExecutedContext.Response.Content.Headers;
+                    if (headers != null)
+                    {
+                        var headersAsText = String.Join(", ", headers.Select(h => new { h.Key, Values = String.Join(", ", h.Value) }));
+                        Trace.WriteLine(String.Format("    Headers: {0}", headersAsText));
+                    }
+                }
+               
+                Trace.WriteLine(string.Format("    Contents saved as {0}", fileName));
+
                 dynamic parsedJson = JsonConvert.DeserializeObject(response);
                 var formattedJson = JsonConvert.SerializeObject(parsedJson, Formatting.Indented);
                 File.WriteAllText(Path.Combine(dataFolder, fileName), formattedJson);
