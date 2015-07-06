@@ -37,7 +37,7 @@ namespace StackOverflowTagServer
             
             //var nGrams = WildcardProcessor.CreateNGramsForIndexing(allTags.Keys, N: 3);
 
-            // <.net> and <c#> aren't in this lists, so they can be valid tags!            
+            // <.net> and <c#> aren't in this lists, so they can be valid tags!
             var leppieTags = GetLeppieTagsFromResource();
 
             //TestWithNGrams(allTags, nGrams, leppieTags);
@@ -55,13 +55,18 @@ namespace StackOverflowTagServer
             var memoryAfter = GC.GetTotalMemory(true);
             Console.WriteLine("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from the file, used {2:0.00} MB of memory\n",
                                 fileReadTimer.Elapsed, rawQuestions.Count, (memoryAfter - memoryBefore) / 1024.0 / 1024.0);
-           
-            //TagServer tagServer = CreateTagServer(rawQuestions, createFromScratch: true, intermediateFilesFolder: folder);
-            TagServer tagServer = CreateTagServer(rawQuestions, createFromScratch: false, intermediateFilesFolder: folder);
+
+            //TagServer tagServer = TagServer.CreateTagServerFromStatchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
+            TagServer tagServer = TagServer.CreateTagServerFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
+            //PrintQuestionStats(rawQuestions);
 
             startupTimer.Stop();
-            Console.WriteLine("Took {0} (in total) to complete Startup", startupTimer.Elapsed);
-            
+            var totalMemory = GC.GetTotalMemory(true);
+            Console.WriteLine("Took {0} (in total) to complete Startup, using {1:N2} MB of memory in TOTAL\n", startupTimer.Elapsed, totalMemory / 1024.0 / 1024.0);
+
+            RunComparisonQueries(tagServer);
+            return;
+
             Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);            
             NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags, N: 3);            
 
@@ -69,6 +74,8 @@ namespace StackOverflowTagServer
 
             // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
             GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
+
+            //return;
 
             //List<string> leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, tagsToExpand: leppieTags);
             //TestTagWildcardExpansion(tagServer.AllTags, trie); 
@@ -86,11 +93,14 @@ namespace StackOverflowTagServer
             //Console.ReadLine();
             //return;
 
-            //if (true)
-            if (false)
+            if (true)
+            //if (false)
             {
-                RunComparisonQueries(tagServer);
-                return;
+                //Console.WriteLine("Press <ENTER> to run Exclusion Query Tests");
+                //Console.ReadLine();
+
+                //RunComparisonQueries(tagServer);
+                //return;
             }
 
             int runsPerLoop = 10;
@@ -415,115 +425,57 @@ namespace StackOverflowTagServer
 
         private static void RunComparisonQueries(TagServer tagServer)
         {
-            var smallTag = tagServer.AllTags.Where(t => t.Value <= 200).First();
-            string tag1 = ".net", tag2 = smallTag.Key;
-            int pageSize = 10;
-            Console.WriteLine("Comparison queries:\n\t\"{0}\" has {1} questions\n\t\"{2}\" has {3} questions\n",
-                              tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
+            var smallTag = tagServer.AllTags.Where(t => t.Value <= 200).First().Key;
+            string largeTag = ".net";
+            int pageSize = 25;
 
-            Console.WriteLine("\nAND Comparison queries\n");
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "AND", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, "AND", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "AND", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "AND", pageSize: pageSize, skip: 100);
-            tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, "AND", pageSize: pageSize, skip: 100);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "AND", pageSize: pageSize, skip: 100);
+            // LARGE 1st Tag, SMALL 2nd Tag
+            //RunAndOrNotComparisionQueries(tagServer, tag1: largeTag, tag2: smallTag, pageSize: pageSize);
+            // SMALL 1st Tag, LARGE 2nd Tag
+            //RunAndOrNotComparisionQueries(tagServer, tag1: smallTag, tag2: largeTag, pageSize: pageSize);
 
-            Console.WriteLine("\nOR Comparison queries\n");
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "OR", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, "OR", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "OR", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "OR", pageSize: pageSize, skip: 100);
-            tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, "OR", pageSize: pageSize, skip: 100);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "OR", pageSize: pageSize, skip: 100);
-
-            Console.WriteLine("\nNOT Comparison queries\n");
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "NOT", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, "NOT", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "NOT", pageSize: pageSize);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "NOT", pageSize: pageSize, skip: 100);
-            tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, "NOT", pageSize: pageSize, skip: 100);
-            tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, "NOT", pageSize: pageSize, skip: 100);
+            // 2 large tags (probably the worst case)
+            RunAndOrNotComparisionQueries(tagServer, "c#", "jquery", pageSize);
         }
 
-        private static TagServer CreateTagServer(List<Question> rawQuestions, bool createFromScratch, string intermediateFilesFolder)
+        private static void RunAndOrNotComparisionQueries(TagServer tagServer, string tag1, string tag2, int pageSize)
         {
-            TagServer tagServer;
-            var allTagsFilename = "intermediate-AllTags.bin";
-            var allTagsFilePath = Path.Combine(intermediateFilesFolder, allTagsFilename);
-            if (createFromScratch)
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\nComparison queries:\n\t\"{0}\" has {1:N0} questions\n\t\"{2}\" has {3:N0} questions",
+                              tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
+            Console.ResetColor();
+
+            //var queries = new[] { "AND", "OR", "NOT", "OR-NOT" };
+            var queries = new[] { "OR-NOT" };
+            var skipCounts = new[] { 0, 100, 250, 500, 1000, 2000, 4000, 8000 };
+            foreach (var query in queries)
             {
-                tagServer = CreateFromScratch(rawQuestions);
-                var serializeTimer = Stopwatch.StartNew();
-
-                Stopwatch itemTimer;
-                Console.WriteLine("Serialisation folder: {0}", intermediateFilesFolder);
-                foreach (QueryType type in (QueryType[])Enum.GetValues(typeof(QueryType)))
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("\n{0} Comparison queries: {1} {0} {2}\n", query, tag1, tag2);
+                Console.ResetColor();
+                foreach (var skipCount in skipCounts)
                 {
-                    var rttFilename = Path.Combine(intermediateFilesFolder, "intermediate-" + type + ".bin");
-                    itemTimer = Stopwatch.StartNew();
-                    if (File.Exists(rttFilename))
-                        File.Delete(rttFilename);
-                    using (var file = File.OpenWrite(rttFilename))
-                    {
-                        Serializer.Serialize(file, tagServer.GetQueryTypeInfo(type));
-                    }
-                    itemTimer.Stop();
-                    Console.WriteLine("Took {0} to serialise to: {1}", itemTimer.Elapsed, "intermediate-" + type + ".bin");
+                    Console.ForegroundColor = ConsoleColor.DarkGreen;
+                    var result1 = tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
+                    var result2 = tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
+                    var result3 = tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
+
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    var result4 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
+                    var result5 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
+                    var result6 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
+
+                    //Console.ForegroundColor = ConsoleColor.DarkYellow;
+                    //var result7 = tagServer.ComparisonQueryAdv(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
+                    //var result8 = tagServer.ComparisonQueryAdv(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
+                    //var result9 = tagServer.ComparisonQueryAdv(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
+
+                    Console.ResetColor();
                 }
+            }            
+        }   
 
-                itemTimer = Stopwatch.StartNew();
-                if (File.Exists(allTagsFilePath))
-                    File.Delete(allTagsFilePath);
-                using (var file = File.OpenWrite(allTagsFilePath))
-                {
-                    Serializer.Serialize(file, tagServer.AllTags);
-                }
-                itemTimer.Stop();
-                Console.WriteLine("Took {0} to serialise to: {1}", itemTimer.Elapsed, allTagsFilename);
-
-                serializeTimer.Stop();
-                Console.WriteLine("\nTook {0} (in TOTAL) to serialise the intermediate data TO disk\n", serializeTimer.Elapsed);
-            }
-            else
-            {
-                var queryTypes = (QueryType[])Enum.GetValues(typeof(QueryType));
-                var intermediateResults = new Dictionary<QueryType, Dictionary<string, int[]>>(queryTypes.Length);
-                var allTags = new TagLookup();
-                var deserializeTimer = Stopwatch.StartNew();
-
-                Stopwatch itemTimer;
-                Console.WriteLine("Deserialisation folder: {0}", intermediateFilesFolder);
-                foreach (QueryType type in queryTypes)
-                {
-                    var rttFilename = Path.Combine(intermediateFilesFolder, "intermediate-" + type + ".bin");
-                    itemTimer = Stopwatch.StartNew();
-                    using (var file = File.OpenRead(rttFilename))
-                    {
-                        var rttTest = Serializer.Deserialize<Dictionary<string, int[]>>(file);
-                        intermediateResults.Add(type, rttTest);
-                    }
-                    itemTimer.Stop();
-                    Console.WriteLine("Took {0} to deserialise from: {1}", itemTimer.Elapsed, "intermediate-" + type + ".bin");
-                }
-
-                itemTimer = Stopwatch.StartNew();
-                using (var file = File.OpenRead(allTagsFilePath))
-                {
-                    allTags = Serializer.Deserialize<TagLookup>(file);
-                }
-                itemTimer.Stop();
-                Console.WriteLine("Took {0} to deserialise from: {1}", itemTimer.Elapsed, allTagsFilename);
-
-                deserializeTimer.Stop();
-                Console.WriteLine("\nTook {0} (in TOTAL) to DE-serialise the intermediate data FROM disk\n", deserializeTimer.Elapsed);
-
-                tagServer = new TagServer(rawQuestions, allTags, intermediateResults);
-            }
-            return tagServer;
-        }
-
-        private static TagServer CreateFromScratch(List<Question> rawQuestions)
+        private static void PrintQuestionStats(List<Question> rawQuestions)
         {
             // For sanity checks!!
             Console.WriteLine("Max LastActivityDate {0}", rawQuestions.Max(q => q.LastActivityDate));
@@ -549,13 +501,7 @@ namespace StackOverflowTagServer
             var highestScore = rawQuestions.OrderByDescending(q => q.Score).First();
             Console.WriteLine("Max ViewCount {0}, Question Id {1}", mostViewed.ViewCount, mostViewed.Id);
             Console.WriteLine("Max Answers {0}, Question Id {1}", mostAnswers.AnswerCount, mostAnswers.Id);
-            Console.WriteLine("Max Score {0}, Question Id {1}\n", highestScore.Score, highestScore.Id);
-
-            var tagServer = new TagServer(rawQuestions);
-            //For DEBUGGING only, so we can test on a smaller sample
-            //var tagServer = new TagServer(rawQuestions.Take(10 * 1000).ToList()); 
-
-            return tagServer;
+            Console.WriteLine("Max Score {0}, Question Id {1}\n", highestScore.Score, highestScore.Id);            
         }
 
         // From http://stackoverflow.com/questions/11590582/read-text-file-resource-from-net-library/11596483#11596483

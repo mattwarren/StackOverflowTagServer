@@ -32,15 +32,13 @@ namespace StackOverflowTagServer
                         if (!result)
                         {
                             Log("Failed with Id {0}, Tag {1}, checker() returned false", id, tag.Key);
-                            //var test = tag.Value.Select(t => questions[t]).ToList();
-                            //System.Diagnostics.Debugger.Launch();
                             break;
                         }
 
-                        if (current.Tags.Any(t => t == tag.Key) == false)
+                        if (tag.Key != TagServer.ALL_TAGS_KEY && 
+                            current.Tags.Any(t => t == tag.Key) == false)
                         {
                             Log("Failed with Id {0}, Expected Tag {1}, Got Tags {2}", id, tag.Key, string.Join(", ", current.Tags));
-                            //System.Diagnostics.Debugger.Launch();
                             break;
                         }
                     }
