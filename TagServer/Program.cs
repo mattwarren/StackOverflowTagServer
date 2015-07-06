@@ -445,16 +445,21 @@ namespace StackOverflowTagServer
                               tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
             Console.ResetColor();
 
-            //var queries = new[] { "AND", "OR", "NOT", "OR-NOT" };
-            var queries = new[] { "OR-NOT" };
+            var queries = new[] { "AND", "OR", "NOT", "OR-NOT" };
+            //var queries = new[] { "OR-NOT" };
+
             var skipCounts = new[] { 0, 100, 250, 500, 1000, 2000, 4000, 8000 };
             foreach (var query in queries)
             {
+                Results.CreateNewFile(string.Format("Results-{0}-{1}-{2}-{3}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss"), tag1, query, tag2));
+                Results.AddHeaders("Skip Count", "Regular", "Regular", "Regular", "No LINQ", "No LINQ", "No LINQ");
+
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("\n{0} Comparison queries: {1} {0} {2}\n", query, tag1, tag2);
                 Console.ResetColor();
                 foreach (var skipCount in skipCounts)
                 {
+                    Results.AddData(skipCount.ToString());
                     Console.ForegroundColor = ConsoleColor.DarkGreen;
                     var result1 = tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
                     var result2 = tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
@@ -465,15 +470,23 @@ namespace StackOverflowTagServer
                     var result5 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
                     var result6 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
 
+                    CompareLists(result1, "Regular", result4, "No LINQ");
+                    CompareLists(result2, "Regular", result5, "No LINQ");
+                    CompareLists(result3, "Regular", result6, "No LINQ");
+
                     //Console.ForegroundColor = ConsoleColor.DarkYellow;
                     //var result7 = tagServer.ComparisonQueryAdv(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
                     //var result8 = tagServer.ComparisonQueryAdv(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
                     //var result9 = tagServer.ComparisonQueryAdv(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
 
                     Console.ResetColor();
+
+                    Results.StartNewRow();
                 }
-            }            
-        }   
+
+                Results.CloseFile();
+            }
+        }
 
         private static void PrintQuestionStats(List<Question> rawQuestions)
         {

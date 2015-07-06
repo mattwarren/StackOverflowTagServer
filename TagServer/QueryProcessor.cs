@@ -10,6 +10,7 @@ using System.Threading;
 using HashSet = StackOverflowTagServer.CLR.HashSet<int>;
 //using HashSet = System.Collections.Generic.HashSet<int>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
+using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 namespace StackOverflowTagServer
 {
@@ -65,17 +66,12 @@ namespace StackOverflowTagServer
         {
             var timer = Stopwatch.StartNew();
             TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
-            Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
             ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
 
             var baseQueryCounter = 0;
-            IEnumerable<int> baseQuery = queryInfo[tag1]
-                .Select(i =>
-                {
-                    baseQueryCounter++;
-                    return i;
-                });
+            //IEnumerable<int> baseQuery = queryInfo[tag1];
+            IEnumerable <int> baseQuery = queryInfo[tag1].Select(t => { baseQueryCounter++; return t; });
             switch (@operator)
             {
                 //Use Intersect for AND, Union for OR and Except for NOT
@@ -83,10 +79,20 @@ namespace StackOverflowTagServer
                     baseQuery = baseQuery.Intersect(queryInfo[tag2]);
                     break;
                 case "OR":
-                    baseQuery = baseQuery.Union(queryInfo[tag2]);
+                    //Union on it's own isn't correcti, it uses seq1.Concat(seq2).Distinct(),
+                    // so it pulls ALL items from seq1, before pulling ANY items from seq2
+                    baseQuery = baseQuery.Zip(queryInfo[tag2], (t1, t2) => new[] { t1, t2 })
+                                         .SelectMany(item => item)
+                                         .Distinct();
                     break;
                 case "NOT":
                     baseQuery = baseQuery.Except(queryInfo[tag2]);
+                    break;
+                case "OR-NOT": //"i.e. .net+or+jquery-"
+                    baseQuery = baseQuery.Zip(queryInfo[TagServer.ALL_TAGS_KEY], (t1, t2) => new[] { t1, t2 })
+                                         .SelectMany(item => item)
+                                         .Except(queryInfo[tag2])
+                                         .Distinct();
                     break;
                 default:
                     throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
@@ -98,12 +104,214 @@ namespace StackOverflowTagServer
                             .ToList();
             timer.Stop();
 
-            Console.WriteLine("Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3}, skip = {4}, took {5} ({6:N2} ms)",
-                               tag1, @operator, tag2, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
-            Console.WriteLine("Got {0} results in total, baseQueryCounter = {1}", result.Count(), baseQueryCounter);
-            var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            Console.WriteLine("\n");
+            Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
+
+            var msg1 = String.Format("REGULAR  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) REGULAR",
+                                     tag1, @operator, tag2, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+            Console.WriteLine(msg1);
+            Trace.Write(msg1);
+
+            var msg2 = String.Format("Got {0:} results in total, baseQueryCounter = {1:N0}", result.Count(), baseQueryCounter);
+            Console.WriteLine(msg2);
+            Trace.Write(msg2);
+
+            //Func<Question, string> fieldSelector = GetFieldSelector(type);
+            //var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
+            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
+            //Console.WriteLine("\n");
+
+            return result;
+        }
+
+        internal List<Question> ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip)
+        {
+            var timer = Stopwatch.StartNew();
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
+            ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
+            ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
+
+            var result = new List<Question>(pageSize);
+            int baseQueryCounter = 0;
+            int itemsSkipped = 0;
+            switch (@operator)
+            {
+                //Use Intersect for AND, Union for OR and Except for NOT
+                case "AND":
+                    // From https://github.com/ungood/EduLinq/blob/master/Edulinq/Intersect.cs#L28-L42
+                    var andHashSet = GetCachedHashSet(queryInfo[tag2]);
+                    foreach (var item in queryInfo[tag1])
+                    {
+                        if (result.Count >= pageSize)
+                            break;
+
+                        if (andHashSet.Contains(item))
+                        {
+                            andHashSet.Remove(item);
+                            if (itemsSkipped >= skip)
+                                result.Add(questions[item]);
+                            else
+                                itemsSkipped++;
+                        }
+
+                        baseQueryCounter++;
+                    }
+                    break;
+                case "OR":
+                    // From http://referencesource.microsoft.com/#System.Core/System/Linq/Enumerable.cs,2b8d0f02389aab71
+                    var alreadySeen = GetCachedHashSet();
+                    using (IEnumerator<int> e1 = queryInfo[tag1].AsEnumerable().GetEnumerator())
+                    using (IEnumerator<int> e2 = queryInfo[tag2].AsEnumerable().GetEnumerator())
+                    { 
+                        while (e1.MoveNext() && e2.MoveNext())
+                        { 
+                            if (result.Count >= pageSize)
+                                break;
+
+                            // See if we can use Tag1
+                            if (alreadySeen.Add(e1.Current))
+                            {
+                                if (itemsSkipped >= skip)
+                                    result.Add(questions[e1.Current]);
+                                else
+                                    itemsSkipped++;
+                            }
+
+                            if (result.Count >= pageSize)
+                                break;
+
+                            // See if we can use Tag2
+                            if (alreadySeen.Add(e2.Current))
+                            {
+                                if (itemsSkipped >= skip)
+                                    result.Add(questions[e2.Current]);
+                                else
+                                    itemsSkipped++;
+                            }
+
+                            baseQueryCounter++;
+                        }
+                    }
+                    break;
+                case "NOT":
+                    // https://github.com/ungood/EduLinq/blob/master/Edulinq/Except.cs#L26-L40
+                    var notHashSet = GetCachedHashSet(queryInfo[tag2]);
+                    foreach (var item in queryInfo[tag1])
+                    {
+                        if (result.Count >= pageSize)
+                            break;
+
+                        if (notHashSet.Add(item))
+                        {
+                            if (itemsSkipped >= skip)
+                                result.Add(questions[item]);
+                            else
+                                itemsSkipped++;
+                        }
+
+                        baseQueryCounter++;
+                    }
+                    break;
+                case "OR-NOT": //"i.e. .net+or+jquery-"
+                    var orNotHashSet = GetCachedHashSet(queryInfo[tag2]);
+                    var seenBefore = new HashSet(); //TODO can't cache more that 1 HashSet per/thread!!
+                    using (IEnumerator<int> e1 = queryInfo[tag1].AsEnumerable().GetEnumerator())
+                    using (IEnumerator<int> e2 = queryInfo[TagServer.ALL_TAGS_KEY].AsEnumerable().GetEnumerator())
+                    {
+                        while (e1.MoveNext() && e2.MoveNext())
+                        {
+                            if (result.Count >= pageSize)
+                                break;
+
+                            if (orNotHashSet.Contains(e1.Current) == false && seenBefore.Add(e1.Current))
+                            {
+                                if (itemsSkipped >= skip)
+                                    result.Add(questions[e1.Current]);
+                                else
+                                    itemsSkipped++;
+                            }
+
+                            if (result.Count >= pageSize)
+                                break;
+
+                            if (orNotHashSet.Contains(e2.Current) == false && seenBefore.Add(e2.Current))
+                            {
+                                if (itemsSkipped >= skip)
+                                    result.Add(questions[e2.Current]);
+                                else
+                                    itemsSkipped++;
+                            }
+
+                            baseQueryCounter++;
+                        }
+                    }
+                    break;
+                default:
+                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
+            }
+            timer.Stop();
+
+            Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
+
+            var msg1 = String.Format("NO LINQ  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) NO LINQ",
+                                     tag1, @operator, tag2, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+            Console.WriteLine(msg1);
+            Trace.Write(msg1);
+
+            var msg2 = String.Format("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}", result.Count(), baseQueryCounter, itemsSkipped);
+            Console.WriteLine(msg2);
+            Trace.Write(msg2);
+
+            //Func<Question, string> fieldSelector = GetFieldSelector(type);
+            //var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
+            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
+            //Console.WriteLine("\n");
+
+            return result;
+        }
+
+        internal List<Question> ComparisonQueryAdv(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip)
+        {
+            var timer = Stopwatch.StartNew();
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
+            //Func<Question, string> fieldSelector = GetFieldSelector(type);
+            ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
+            ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
+
+            var baseHashSet = GetCachedHashSet(queryInfo[tag1]);
+            switch (@operator)
+            {
+                //Use Intersect for AND, Union for OR and Except for NOT
+                case "AND":
+                    // TODO - this calculates EVERYTHING up front, it's NOT streaming/lazy like the LINQ methods!!
+                    var otherHashSet = new HashSet(queryInfo[tag2]);
+                    baseHashSet.IntersectWith(otherHashSet);
+                    break;
+                case "OR":
+                    //var otherHashSet = new HashSet(queryInfo[tag2]);
+                    //baseHashSet.
+                    //baseQuery = baseQuery.Union(queryInfo[tag2]);
+                    break;
+                case "NOT":
+                    //baseQuery = baseQuery.Except(queryInfo[tag2]);
+                    break;
+                default:
+                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
+            }
+
+            var result = baseHashSet.Skip(skip)
+                            .Take(pageSize)
+                            .Select(i => questions[i])
+                            .ToList();
+            timer.Stop();
+
+            var msg1 = String.Format("ADVANCED Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) ADVANCED",
+                                     tag1, @operator, tag2, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+            Console.WriteLine(msg1);
+            Trace.Write(msg1);
+
+            var msg2 = String.Format("Got {0:} results in total", result.Count());
+            Console.WriteLine(msg2);
+            Trace.Write(msg2);
 
             return result;
         }
@@ -134,11 +342,8 @@ namespace StackOverflowTagServer
                                     type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             Console.WriteLine("Got {0} results", results.Count());
             Console.WriteLine(gcInfo.ToString());
-            //if (pageSize <= 50)
-            //{
-            //    var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            //    Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            //}
+            //var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
+            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
             Console.WriteLine();
 
             return results;
@@ -157,9 +362,7 @@ namespace StackOverflowTagServer
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
-            var baseHashSet = HashSetCache.Value;
-            baseHashSet.Clear();
-            baseHashSet.UnionWith(queryInfo[tag]);
+            var baseHashSet = GetCachedHashSet(queryInfo[tag]);
             foreach (var excludedTag in excludedTags)
             {
                 foreach (var qu in queryInfo[excludedTag])
@@ -208,8 +411,7 @@ namespace StackOverflowTagServer
             //var exclusions = new HashSet(new IntComparer());
             ////ensure the HashSet is pre-sized, so it doesn't have to re-size as we add items
             //initialiseMethod.Invoke(exclusions, new object[] { exclusionCount });
-            var exclusions = HashSetCache.Value;
-            exclusions.Clear();
+            var exclusions = GetCachedHashSet();
             foreach (var excludedTag in excludedTags)
             {
                 foreach (var qu in queryInfo[excludedTag])
@@ -362,6 +564,22 @@ namespace StackOverflowTagServer
             return result;
         }
 
+#region HelperMethods
+        private HashSet GetCachedHashSet(IEnumerable<int> populateHashSet)
+        {
+            var hashSet = HashSetCache.Value;
+            hashSet.Clear();
+            hashSet.UnionWith(populateHashSet);
+            return hashSet;
+        }
+
+        private HashSet GetCachedHashSet()
+        {
+            var hashSet = HashSetCache.Value;
+            hashSet.Clear();
+            return hashSet;
+        }
+
         private IDisposable SetConsoleColour(ConsoleColor newColour)
         {
             var originalColour = Console.ForegroundColor;
@@ -413,4 +631,5 @@ namespace StackOverflowTagServer
                 throw new InvalidOperationException(string.Format("Invalid page size provided: {0}, only values from 1 to 250 are allowed", pageSize));
         }
     }
+#endregion HelperMethods
 }
