@@ -24,25 +24,45 @@ namespace StackOverflowTagServer
             Console.WriteLine("IsServerGC: {0}, LatencyMode: {1}", GCSettings.IsServerGC, GCSettings.LatencyMode);
 
             var folder = @"C:\Users\warma11\Downloads\__GitHub__\StackOverflowTagServer\BinaryData\";
-            //var filename = @"Questions.bin";
             var filename = @"Questions-NEW.bin";
             //var filename = @"Questions-subset.bin";
 
-            //var allTagsFilename = "intermediate-AllTags.bin";
-            //TagLookup allTags;
-            //using (var file = File.OpenRead(Path.Combine(folder, allTagsFilename)))
-            //{
-            //    allTags = Serializer.Deserialize<TagLookup>(file);
-            //}
-            
-            //var nGrams = WildcardProcessor.CreateNGramsForIndexing(allTags.Keys, N: 3);
+            var startupTimer = Stopwatch.StartNew();
+            var rawQuestions = GetRawQuestionsFromDisk(folder, filename);
+
+            //TagServer tagServer = TagServer.CreateTagServerFromStatchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
+            TagServer tagServer = TagServer.CreateTagServerFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
+            //PrintQuestionStats(rawQuestions);
+
+            startupTimer.Stop();
+            var totalMemory = GC.GetTotalMemory(true);
+            Console.WriteLine("Took {0} (in total) to complete Startup, using {1:N2} MB of memory in TOTAL\n", startupTimer.Elapsed, totalMemory / 1024.0 / 1024.0);
+
+            //RunComparisonQueries(tagServer);
+            //return;
+
+            Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);
+            NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags, N: 3);
 
             // <.net> and <c#> aren't in this lists, so they can be valid tags!
             var leppieTags = GetLeppieTagsFromResource();
+            var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
 
-            //TestWithNGrams(allTags, nGrams, leppieTags);
+            // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
+            GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
 
-            var startupTimer = Stopwatch.StartNew();
+            //return;
+
+            RunExclusionQueryTests(tagServer, leppieExpandedTags, runsPerLoop: 10);
+
+            RunSimpleQueries();
+
+            Console.WriteLine("Finished, press <ENTER> to exit");
+            Console.ReadLine();
+        }
+
+        private static List<Question> GetRawQuestionsFromDisk(string folder, string filename)
+        {
             List<Question> rawQuestions;
             var memoryBefore = GC.GetTotalMemory(true);
             var fileReadTimer = Stopwatch.StartNew();
@@ -56,119 +76,7 @@ namespace StackOverflowTagServer
             Console.WriteLine("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from the file, used {2:0.00} MB of memory\n",
                                 fileReadTimer.Elapsed, rawQuestions.Count, (memoryAfter - memoryBefore) / 1024.0 / 1024.0);
 
-            //TagServer tagServer = TagServer.CreateTagServerFromStatchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
-            TagServer tagServer = TagServer.CreateTagServerFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
-            //PrintQuestionStats(rawQuestions);
-
-            startupTimer.Stop();
-            var totalMemory = GC.GetTotalMemory(true);
-            Console.WriteLine("Took {0} (in total) to complete Startup, using {1:N2} MB of memory in TOTAL\n", startupTimer.Elapsed, totalMemory / 1024.0 / 1024.0);
-
-            RunComparisonQueries(tagServer);
-            return;
-
-            Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);            
-            NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags, N: 3);            
-
-            var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
-
-            // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
-            GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
-
-            //return;
-
-            //List<string> leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, tagsToExpand: leppieTags);
-            //TestTagWildcardExpansion(tagServer.AllTags, trie); 
-
-            //TestWithNGrams(tagServer.AllTags, leppieTags);
-
-            //return;
-
-#region QueryTestingCode
-            //var queryTester = new QueryTester(tagServer.Questions);
-            //queryTester.TestAndOrNotQueries();
-            //queryTester.TestQueries();
-
-            //Console.WriteLine("Finished, press <ENTER> to exit");
-            //Console.ReadLine();
-            //return;
-
-            if (true)
-            //if (false)
-            {
-                //Console.WriteLine("Press <ENTER> to run Exclusion Query Tests");
-                //Console.ReadLine();
-
-                //RunComparisonQueries(tagServer);
-                //return;
-            }
-
-            int runsPerLoop = 10;
-            //int runsPerLoop = 1;
-
-            RunExclusionQueryTests(tagServer, leppieExpandedTags, runsPerLoop);
-
-            //Console.WriteLine("\n\nVarying the number of \"Skipped Pages\"\n");
-            ////for (decimal skip = (25.0m / 16.0m); skip <= 1600; skip *= 2)
-            //for (decimal skip = (25.0m / 16.0m); skip <= 800; skip *= 2)
-            //{
-            //    var pageSize = 50;
-            //    for (int i = 0; i < runsPerLoop; i++)
-            //    {
-            //        var resultsSlow = tagServer.BooleanQueryWithExclusionsSlowVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
-            //        var resultsFast = tagServer.BooleanQueryWithExclusionsFastVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
-            //        var resultsFastAlt = tagServer.BooleanQueryWithExclusionsFastAlternativeVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
-            //        //tagServer.BooleanQueryWithExclusionsBloomFilterVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
-            //    }
-            //}
-
-            //return;
-
-            // Regular queries, i.e. single tag, no Boolean operators
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 0);
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 9);
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 10);
-
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 100, skip: 10000);
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 100, skip: 1000000);
-
-            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 95);
-            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 100);
-            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 105);
-
-            Console.WriteLine("Finished, press <ENTER> to exit");
-            Console.ReadLine();
-#endregion
-        }
-
-        private static void TestWithNGrams(TagLookup allTags, NGrams nGrams, List<string> tagsToExpand)
-        {
-            //var sampleTags = new List<string>(new[]
-            //    {
-            //        ".net", "c#", "c#-4.0", "c#-5.0", "java", "nhibernate", "hibernate", "java-8", "java-7"
-            //    });
-            //var ngrams = WildcardProcessor.CreateNGramsForIndexing(sampleTags, N: 3);
-            //Console.WriteLine("Tri-grams (n-grams):");
-            //foreach (var ngram in ngrams)
-            //{
-            //    Console.WriteLine("\t{0}: {1}", ngram.Key, String.Join(", ", ngram.Value.Select(i => sampleTags[i])));
-            //}
-            //return;
-
-            //Console.WriteLine("Tri-grams (n-grams):");
-            //foreach (var ngram in nGrams)
-            //{
-            //    Console.WriteLine("\t{0}: {1}", ngram.Key, String.Join(", ", ngram.Value.Select(i => tagServer.AllTags.ElementAt(i))));
-            //}
-            //Console.WriteLine("Took {0} to create {1} n-grams\n", nGrams.Count, nGramsTimer.Elapsed);
-
-            //var leppieExpandTimer = Stopwatch.StartNew();
-            //var allTagsList = allTags.Keys.ToList();
-            //int tagsExpandedCounter;
-            //var allExpandedTags = WildcardProcessor.ExpandTagsNGrams(allTags: allTagsList, tagsToExpand: tagsToExpand, nGrams: nGrams);
-            //leppieExpandTimer.Stop();
-            //Console.WriteLine("\nTook {0} ({1,5:N0} ms) to expand {2} items (out of {3}) to {4} Tags\n", leppieExpandTimer.Elapsed,
-            //                  leppieExpandTimer.ElapsedMilliseconds, tagsExpandedCounter, tagsToExpand.Count, allExpandedTags.Count);
+            return rawQuestions;
         }
 
         private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, HashSet leppieExpandedTags)
@@ -210,7 +118,7 @@ namespace StackOverflowTagServer
         }
 
         private static HashSet ProcessTagsForFastLookup(TagLookup allTags, Trie<int> trie, NGrams nGrams, List<string> tagsToExpand)
-        {            
+        {
             var expandTagsContainsTimer = Stopwatch.StartNew();
             var expandTagsContains = WildcardProcessor.ExpandTagsContainsStartsWithEndsWith(allTags, tagsToExpand);
             expandTagsContainsTimer.Stop();
@@ -255,7 +163,7 @@ namespace StackOverflowTagServer
 
             Console.WriteLine("\nIn Contains but not in NGrams: " + string.Join(", ", expandTagsContains.Except(expandedTagsNGrams)));
             Console.WriteLine("\nIn NGrams but not in Contains: " + string.Join(", ", expandedTagsNGrams.Except(expandTagsContains)));
-            Console.WriteLine();            
+            Console.WriteLine();
 
             var expandedTags = expandedTagsNGrams;
             //Console.WriteLine(string.Join(", ", expandedTags));
@@ -263,72 +171,9 @@ namespace StackOverflowTagServer
             // This is an error, we shouldn't have extra tags that aren't in the "allTags" list!!
             var extra = expandedTags.Except(allTags.Keys).ToList();
             if (extra.Count > 0)
-                Console.WriteLine("\nExtra Tags: " + string.Join(", ", extra) + "\n");            
+                Console.WriteLine("\nExtra Tags: " + string.Join(", ", extra) + "\n");
 
             return expandedTags;
-        }
-
-        private static void TestTagWildcardExpansion(TagLookup allTags, Trie<int> trie)
-        {
-            var test = new[] {"*js"}.ToList();
-            var results = WildcardProcessor.ExpandTagsTrie(allTags, test, trie);
-            Console.WriteLine("Testing *js Contains(\"json\") = {0} :\n{1}", results.Contains("json"), string.Join(", ", results));
-
-            var tests = new[]
-                {
-                    "actionscript", // actionscript* (starts-with)
-                    "dbcp", // *dbcp (ends-with)
-                    "jaxb", // *jaxb* (both)
-                    "*js",
-                    "js*",
-                    "*js*",
-                    "php",
-                    "*php*",
-                };
-            //var tests = new[] { "*php*" };
-
-            var oldModeTimer = Stopwatch.StartNew();
-            var phpMatchesOld = WildcardProcessor.ExpandTagsTrie(allTags, tests.ToList(), trie, useNewMode: false);
-            oldModeTimer.Stop();
-            Console.WriteLine("\nTesting {{{0}}} OLD mode, took {1:N} ms ({2} expanded tags):\n{3}\n",
-                              String.Join(", ", tests), oldModeTimer.ElapsedMilliseconds, phpMatchesOld.Count,
-                              String.Join(", ", phpMatchesOld));
-
-            var newModeTimer = Stopwatch.StartNew();
-            var phpMatchesNew = WildcardProcessor.ExpandTagsTrie(allTags, tests.ToList(), trie, useNewMode: true);
-            newModeTimer.Stop();
-            Console.WriteLine("\nTesting {{{0}}} NEW mode, took {1:N} ms ({2} expanded tags):\n{3}\n",
-                              String.Join(", ", tests), newModeTimer.ElapsedMilliseconds, phpMatchesNew.Count,
-                              String.Join(", ", phpMatchesNew));
-
-            //var tests = new[]
-            //    { 
-            //        "actionscript", // actionscript* (starts-with)
-            //        "dbcp", // *dbcp (ends-with)
-            //        "jaxb", // *jaxb* (both)
-            //        "js",
-            //        //"php",
-            //    };
-            //foreach (var test in tests)
-            //{
-            //    Console.WriteLine();
-            //    foreach (var item in new[] { test, WildcardProcessor.Reverse(test) })
-            //    {
-            //        var matches = string.Join(", ", trie.GetByPrefix(item).Select(t =>
-            //        {
-            //            if (t.Value == 1)
-            //                return t.Key; // + " (Forward)";
-            //            else if (t.Value == -1)
-            //                return WildcardProcessor.Reverse(t.Key) + " (Reversed)";
-            //            else if (t.Value == 0)
-            //                return t.Key + " (Both)";
-            //            else
-            //                return t.Key + " (" + t.Value + ")";
-            //        }));
-            //        Console.WriteLine("{0} -> {1}", item, matches);
-            //    }
-            //}
-            //Console.WriteLine();
         }
 
         private static void RunExclusionQueryTests(TagServer tagServer, HashSet expandedTags, int runsPerLoop)
@@ -348,12 +193,13 @@ namespace StackOverflowTagServer
             amounts.Add(expandedTags.Count);
 
             Console.WriteLine("\n\nVarying the number of \"Not Queries\"\n");
+            var expandedTagsAsList = expandedTags.ToList();
             //while (true)
             {
                 foreach (var count in amounts)
                 {
                     var pageSize = 50;
-                    var excludedTags = SelectNItemsFromList(expandedTags.ToList(), count);
+                    var excludedTags = SelectNItemsFromList(expandedTagsAsList, count);
                     //Console.WriteLine("Count={0}, excludedTags.Count={1} tags:{2}\n\n", count, excludedTags.Count, string.Join(", ", excludedTags));
                     //continue;
 
@@ -377,50 +223,23 @@ namespace StackOverflowTagServer
                 }
             }
 
-            Results.CloseFile();
-        }
-
-        private static List<string> SelectNItemsFromList(List<string> expandedTags, int count)
-        {
-            if (count == expandedTags.Count)
-                return expandedTags;
-            else
-            {
-                var result = new List<string>(count);
-                var step = expandedTags.Count / count;
-                int i = 0;
-                while (i < expandedTags.Count && (result.Count < count))
-                {
-                    result.Add(expandedTags[i]);
-                    i += step;
-                }
-                return result;
-            }
-        }      
-
-        private static void CompareLists(List<Question> listA, string nameA, List<Question> listB, string nameB)
-        {
-            if (listA.Count != listB.Count)
-                Console.WriteLine("ERROR: list have different lengths, {0}: {1}, {2}: {3}", nameA, listA.Count, nameB, listB.Count);
-            var AExceptB = listA.Select(r => r.Id).Except(listB.Select(r => r.Id)).ToList();
-            if (AExceptB.Any())
-            {
-                Console.WriteLine("ERROR: Items in {0}, but not in {1}: {2}\n", nameA, nameB,
-                                  string.Join(", ", AExceptB.Select(r => string.Format("[{0}]={1}", listA.FindIndex(s => s.Id == r), r))));
-            }
-            var BExceptA = listB.Select(r => r.Id).Except(listA.Select(r => r.Id)).ToList();
-            if (BExceptA.Any())
-            {
-                Console.WriteLine("ERROR: Items in {0}, but not in {1}: {2}\n", nameB, nameA,
-                                  string.Join(", ", BExceptA.Select(r => string.Format("[{0}]={1}", listB.FindIndex(s => s.Id == r), r))));
-            }
-
-            //foreach (var item in Enumerable.Range(0, Math.Min(listA.Count, listB.Count)))
+            //Console.WriteLine("\n\nVarying the number of \"Skipped Pages\"\n");
+            ////for (decimal skip = (25.0m / 16.0m); skip <= 1600; skip *= 2)
+            //for (decimal skip = (25.0m / 16.0m); skip <= 800; skip *= 2)
             //{
-            //    if (listA[item].Id != listB[item].Id)
-            //        Console.WriteLine("ERROR: lists differ at position[{0}], {1} Id: {2}, {3} Id: {4}", 
-            //                          item, nameA, listA[item].Id, nameB, listB[item].Id);
+            //    var pageSize = 50;
+            //    for (int i = 0; i < runsPerLoop; i++)
+            //    {
+            //        var resultsSlow = tagServer.BooleanQueryWithExclusionsSlowVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
+            //        var resultsFast = tagServer.BooleanQueryWithExclusionsFastVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
+            //        var resultsFastAlt = tagServer.BooleanQueryWithExclusionsFastAlternativeVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
+            //        //tagServer.BooleanQueryWithExclusionsBloomFilterVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
+            //    }
             //}
+
+            //return;
+
+            Results.CloseFile();
         }
 
         private static void RunComparisonQueries(TagServer tagServer)
@@ -488,6 +307,29 @@ namespace StackOverflowTagServer
             }
         }
 
+        private static void RunSimpleQueries()
+        {
+            //var queryTester = new QueryTester(tagServer.Questions);
+            //queryTester.TestAndOrNotQueries();
+            //queryTester.TestQueries();
+
+            //Console.WriteLine("Finished, press <ENTER> to exit");
+            //Console.ReadLine();
+            //return;
+
+            // Regular queries, i.e. single tag, no Boolean operators
+            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 0);
+            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 9);
+            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 10);
+
+            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 100, skip: 10000);
+            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 100, skip: 1000000);
+
+            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 95);
+            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 100);
+            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 105);
+        }
+
         private static void PrintQuestionStats(List<Question> rawQuestions)
         {
             // For sanity checks!!
@@ -517,6 +359,50 @@ namespace StackOverflowTagServer
             Console.WriteLine("Max Score {0}, Question Id {1}\n", highestScore.Score, highestScore.Id);            
         }
 
+#region HelperMethods
+        private static void CompareLists(List<Question> listA, string nameA, List<Question> listB, string nameB)
+        {
+            if (listA.Count != listB.Count)
+                Console.WriteLine("ERROR: list have different lengths, {0}: {1}, {2}: {3}", nameA, listA.Count, nameB, listB.Count);
+            var AExceptB = listA.Select(r => r.Id).Except(listB.Select(r => r.Id)).ToList();
+            if (AExceptB.Any())
+            {
+                Console.WriteLine("ERROR: Items in {0}, but not in {1}: {2}\n", nameA, nameB,
+                                  string.Join(", ", AExceptB.Select(r => string.Format("[{0}]={1}", listA.FindIndex(s => s.Id == r), r))));
+            }
+            var BExceptA = listB.Select(r => r.Id).Except(listA.Select(r => r.Id)).ToList();
+            if (BExceptA.Any())
+            {
+                Console.WriteLine("ERROR: Items in {0}, but not in {1}: {2}\n", nameB, nameA,
+                                  string.Join(", ", BExceptA.Select(r => string.Format("[{0}]={1}", listB.FindIndex(s => s.Id == r), r))));
+            }
+
+            //foreach (var item in Enumerable.Range(0, Math.Min(listA.Count, listB.Count)))
+            //{
+            //    if (listA[item].Id != listB[item].Id)
+            //        Console.WriteLine("ERROR: lists differ at position[{0}], {1} Id: {2}, {3} Id: {4}", 
+            //                          item, nameA, listA[item].Id, nameB, listB[item].Id);
+            //}
+        }
+
+        private static List<string> SelectNItemsFromList(List<string> expandedTags, int count)
+        {
+            if (count == expandedTags.Count)
+                return expandedTags;
+            else
+            {
+                var result = new List<string>(count);
+                var step = expandedTags.Count / count;
+                int i = 0;
+                while (i < expandedTags.Count && (result.Count < count))
+                {
+                    result.Add(expandedTags[i]);
+                    i += step;
+                }
+                return result;
+            }
+        }
+
         // From http://stackoverflow.com/questions/11590582/read-text-file-resource-from-net-library/11596483#11596483
         private static Stream GetStream(string resourceName)
         {
@@ -539,6 +425,7 @@ namespace StackOverflowTagServer
             }
             return Stream.Null;
         }
+#endregion #region HelperMethods
     }
-// ReSharper restore LocalizableElement
+    // ReSharper restore LocalizableElement
 }

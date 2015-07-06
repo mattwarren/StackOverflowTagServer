@@ -630,6 +630,6 @@ namespace StackOverflowTagServer
             if (pageSize < 1 || pageSize > 250)
                 throw new InvalidOperationException(string.Format("Invalid page size provided: {0}, only values from 1 to 250 are allowed", pageSize));
         }
-    }
 #endregion HelperMethods
+    }
 }

@@ -41,10 +41,10 @@ namespace StackOverflowTagServer
         private readonly TagByQueryLookup tagsByScore;
         private readonly TagByQueryLookup tagsByViewCount;
 
-        //private readonly TabByQueryLookupBitSet tagsBitSet;        
+        //private readonly TabByQueryLookupBitSet tagsBitSet;
 
         private readonly QueryProcessor queryProcessor;
-       
+
         public static TagServer CreateFromFile(string filename)
         {
             List<Question> rawQuestions;
