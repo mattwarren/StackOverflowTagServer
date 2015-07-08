@@ -1,7 +1,6 @@
 ﻿using StackOverflowTagServer;
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Linq;
 using System.Web;
 using System.Web.Http;
@@ -30,38 +29,38 @@ namespace Server.Controllers
             {
                 Trace.Write(ex);
                 telemetry.TrackException(ex); //, properties, measurements);
-                return new { Error = ex.ToString().Split(new [] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) };
+                return new { Error = ex.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) };
             }
         }
 
         private object GetAPIInfo(TagServer tagServer)
         {
             return new
+            {
+                SampleUrls = new
                 {
-                    SampleUrls = new 
-                    {
-                        BasicQueries = new Dictionary<string, string>()
+                    BasicQueries = new Dictionary<string, string>
                             {
-                                { Request.RequestUri.ToString() + "/c%23", 
+                                { Request.RequestUri.ToString() + "/c%23",
                                     "c# questions (have to escape \"c#\" -> \"c%23\"), defaults to QueryType.ViewCount, pageSize = 50, skip = 0" },
-                                { Request.RequestUri.ToString() + 
+                                { Request.RequestUri.ToString() +
                                     "/c%23?Type=LastActivityDate&PageSize=25", "25 Most Recent c# questions" },
-                                { Request.RequestUri.ToString() + 
+                                { Request.RequestUri.ToString() +
                                     "/c%23?Type=Score&PageSize=1&Skip=71993", "Lowest scoring c# question" },
-                                { Request.RequestUri.ToString() + 
+                                { Request.RequestUri.ToString() +
                                     "/.net?Type=AnswerCount&PageSize=1", "The .NET question with the most answers" },
                             }.ToArray(),
-                        RelatedTagQueries = new Dictionary<string, string>()
-                            {
-                            }.ToArray(),
-                    },
-                    SetupMessages = tagServer.Messages,
-                    Top50Tags = tagServer.AllTags
+                    RelatedTagQueries = new Dictionary<string, string>
+                    {
+                    }.ToArray(),
+                },
+                SetupMessages = TagServer.Messages,
+                Top50Tags = tagServer.AllTags
                                         .Take(50),
-                    Bottom50Tags = tagServer.AllTags
+                Bottom50Tags = tagServer.AllTags
                                         .OrderBy(t => t.Value)
                                         .Take(50)
-                };
+            };
         }
 
         // GET: api/Tags/5
@@ -81,30 +80,66 @@ namespace Server.Controllers
             var results = WebApiApplication.TagServer.Value.Query(type, tag, pageSize, skip);
             timer.Stop();
 
-            var totalCount = WebApiApplication.TagServer.Value.TotalCount(type, tag);
-
             return new
+            {
+                Statistics = new {
+                    Elapsed = timer.Elapsed,
+                    ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
+                    Count = results.Count,
+                    TotalCount = WebApiApplication.TagServer.Value.TotalCount(type, tag)
+                },
+                DEBUGGING = new
                 {
-                    Statistics = new {
-                        Elapsed = timer.Elapsed,
-                        ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
-                        Count = results.Count,
-                        TotalCount = totalCount
-                    },
-                    DEBUGGING = new
-                    {
-                        Tag = tag,
-                        QueryType = type.ToString(),
-                        PageSize = pageSize,
-                        Skip = skip,
-                        HttpContext.Current.Request.Path,
-                        HttpContext.Current.Request.RawUrl,
-                        QueryString = HttpContext.Current.Request.QueryString
+                    Tag = tag,
+                    QueryType = type.ToString(),
+                    PageSize = pageSize,
+                    Skip = skip,
+                    HttpContext.Current.Request.Path,
+                    HttpContext.Current.Request.RawUrl,
+                    QueryString = HttpContext.Current.Request.QueryString
                                             .ToPairs()
                                             .ToDictionary(p => p.Key, p => p.Value)
-                    },
-                    Results = results,
-                };
+                },
+                Results = results,
+            };
+        }
+
+        public object GetWithNotOtherTag(string tag)
+        {
+            // Couldn't get Web API to play nice with "c%23" ("c#") and query parameters?!?
+            var queryStringPairs = HttpContext.Current.Request.QueryString.ToPairs();
+            var type = QueryStringOrDefaultEnum(queryStringPairs, "type", QueryType.ViewCount);
+            var pageSize = QueryStringOrDefaultInt(queryStringPairs, "pageSize", 50);
+            var skip = QueryStringOrDefaultInt(queryStringPairs, "skip", 0);
+            var otherTag = QueryStringOrDefaultString(queryStringPairs, "otherTag", "");
+
+            var timer = Stopwatch.StartNew();
+            var results = WebApiApplication.TagServer.Value.ComparisonQuery(type, tag, otherTag, "NOT", pageSize, skip);
+            timer.Stop();
+
+            return new
+            {
+                Statistics = new
+                {
+                    Elapsed = timer.Elapsed,
+                    ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
+                    Count = results.Count,
+                    TotalCount = WebApiApplication.TagServer.Value.TotalCount(type, tag)
+                },
+                DEBUGGING = new
+                {
+                    Tag = tag,
+                    QueryType = type.ToString(),
+                    PageSize = pageSize,
+                    Skip = skip,
+                    HttpContext.Current.Request.Path,
+                    HttpContext.Current.Request.RawUrl,
+                    QueryString = HttpContext.Current.Request.QueryString
+                                            .ToPairs()
+                                            .ToDictionary(p => p.Key, p => p.Value)
+                },
+                Results = results,
+            };
         }
 
         private T QueryStringOrDefaultEnum<T>(IEnumerable<KeyValuePair<string, string>> parameters, string name, T defaultValue)
@@ -123,6 +158,16 @@ namespace Server.Controllers
             {
                 var match = parameters.First(p => p.Key.ToLowerInvariant() == name.ToLowerInvariant());
                 return int.Parse(match.Value, NumberStyles.Integer);
+            }
+            return defaultValue;
+        }
+
+        private string QueryStringOrDefaultString(IEnumerable<KeyValuePair<string, string>> parameters, string name, string defaultValue)
+        {
+            if (parameters.Any(p => p.Key.ToLowerInvariant() == name.ToLowerInvariant()))
+            {
+                var match = parameters.First(p => p.Key.ToLowerInvariant() == name.ToLowerInvariant());
+                return match.Value;
             }
             return defaultValue;
         }

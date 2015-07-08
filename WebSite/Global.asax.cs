@@ -5,7 +5,6 @@ using StackOverflowTagServer;
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Threading;
 using System.Web;
 using System.Web.Http;
@@ -46,6 +45,7 @@ namespace Server
             var dataFolder = HttpContext.Current.Server.MapPath("~/Data");
             Trace.WriteLine("Data folder: " + dataFolder);
             ListFolderInfo(dataFolder);
+            Trace.WriteLine("Finished listing contents of Data folder: " + dataFolder);
 
             var questionsPath = Path.Combine(dataFolder, "Questions-NEW.bin");
             if (File.Exists(questionsPath) == false)
@@ -91,7 +91,9 @@ namespace Server
                 }
             }
 
+            Trace.WriteLine("Data folder: " + dataFolder);
             ListFolderInfo(dataFolder);
+            Trace.WriteLine("Finished listing contents of Data folder: " + dataFolder);
 
             return StackOverflowTagServer.TagServer.CreateFromFile(questionsPath);
         }
@@ -110,9 +112,7 @@ namespace Server
                 Trace.WriteLine(string.Format("Took {0} to download {1:N0} bytes", timer.Elapsed, blob.Properties.Length));
                 Trace.WriteLine(string.Format("File {0}, Info (on disk) {1:N0} bytes", Path.GetFileName(outputPath), new FileInfo(outputPath).Length));
             }
-        }
-
-       
+        }       
 
         private static void ListFolderInfo(string folderName)
         {

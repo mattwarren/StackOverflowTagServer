@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Web;
 using System.Web.Http.Controllers;
 using System.Web.Http.Filters;
@@ -24,13 +23,6 @@ namespace Server.Infrastructure
 
         public async override void OnActionExecuted(HttpActionExecutedContext actionExecutedContext)
         {
-            //var objectContent = actionExecutedContext.Response.Content as ObjectContent;
-            //if (objectContent != null)
-            //{
-            //    var type = objectContent.ObjectType; //type of the returned object
-            //    var value = objectContent.Value; //holding the returned value
-            //}
-
             var fileName = "Response-" + Guid.NewGuid() + ".json";
             var dataFolder = HttpContext.Current.Server.MapPath("~/Data");
             var response = "";
