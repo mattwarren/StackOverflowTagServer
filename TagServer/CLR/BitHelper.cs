@@ -1,4 +1,5 @@
 ﻿using ProtoBuf;
+using System;
 
 namespace StackOverflowTagServer.CLR
 {
@@ -103,6 +104,10 @@ namespace StackOverflowTagServer.CLR
                 if (bitArrayIndex < m_length && bitArrayIndex >= 0)
                 {
                     m_array[bitArrayIndex] |= (MarkedBitFlag << (bitPosition % IntSize));
+                }
+                else
+                {
+                    throw new ArgumentOutOfRangeException("bitPosition", String.Format("Must be less than {0}, but was {1} ({2})", m_length, bitArrayIndex, bitPosition));
                 }
             }
         }

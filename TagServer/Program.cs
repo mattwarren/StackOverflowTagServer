@@ -23,6 +23,9 @@ namespace StackOverflowTagServer
         {
             Console.WriteLine("IsServerGC: {0}, LatencyMode: {1}", GCSettings.IsServerGC, GCSettings.LatencyMode);
 
+            //TestSerialisationOfBitArrays();            
+            //return;
+
             var folder = @"C:\Users\warma11\Downloads\__GitHub__\StackOverflowTagServer\BinaryData\";
             var filename = @"Questions-NEW.bin";
             //var filename = @"Questions-subset.bin";
@@ -30,13 +33,20 @@ namespace StackOverflowTagServer
             var startupTimer = Stopwatch.StartNew();
             var rawQuestions = GetRawQuestionsFromDisk(folder, filename);
 
-            //TagServer tagServer = TagServer.CreateTagServerFromStatchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
-            TagServer tagServer = TagServer.CreateTagServerFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
+            //TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
+            TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
+
             //PrintQuestionStats(rawQuestions);
+            //PrintTagStats(tagServer.AllTags);
 
             startupTimer.Stop();
-            var totalMemory = GC.GetTotalMemory(true);
-            Console.WriteLine("Took {0} (in total) to complete Startup, using {1:N2} MB of memory in TOTAL\n", startupTimer.Elapsed, totalMemory / 1024.0 / 1024.0);
+
+            GC.Collect(2, GCCollectionMode.Forced);
+            var totalMemory = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            Console.WriteLine("Took {0} ({1:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL", 
+                              startupTimer.Elapsed, startupTimer.Elapsed.TotalMilliseconds, totalMemory, totalMemory / 1024.0);
+
+            return;
 
             //RunComparisonQueries(tagServer);
             //return;
@@ -51,20 +61,94 @@ namespace StackOverflowTagServer
             // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
             GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
 
-            //return;
-
             RunExclusionQueryTests(tagServer, leppieExpandedTags, runsPerLoop: 10);
 
-            RunSimpleQueries();
+            //RunSimpleQueries();
 
             Console.WriteLine("Finished, press <ENTER> to exit");
             Console.ReadLine();
         }
 
+        //private static void TestSerialisationOfBitArrays()
+        //{
+        //    var bitArray = new BitArray(7990787);
+        //    bitArray.Set(10, true);
+        //    var BytesPerInt32 = 4;
+        //    var internalArraySize = ((bitArray.Count - 1) / BytesPerInt32) + 1;
+        //    Console.WriteLine("BitArray Length: {0:N0} Size: {1:N0} bytes ({2:N2} MB)",
+        //                      bitArray.Length, internalArraySize, internalArraySize / 1024.0 / 1024.0);
+
+        //    var BitsPerByte = 8;
+        //    var requiredLength = ((bitArray.Count - 1) / BitsPerByte) + 1;
+        //    Console.WriteLine("BitArray Required Length: {0:N0}", requiredLength);
+        //    var testByteArray = new byte[requiredLength]; // (requiredLength - 1) blow up!!
+        //    bitArray.CopyTo(testByteArray, 0);
+
+        //    var testIntArray = new int[internalArraySize];
+        //    bitArray.CopyTo(testIntArray, 0);
+
+        //    var bitHelper = new CLR.BitHelper(testIntArray, requiredLength);
+
+        //    var fileName = "Testing-BitArray.bin";
+        //    using (var file = File.OpenWrite(fileName))
+        //    {
+        //        try
+        //        {
+        //            //Serializer.Serialize(file, bitArray);
+        //            bitHelper.MarkBit(100);
+        //            Serializer.Serialize(file, bitHelper);
+        //            FileInfo fileInfo = new FileInfo(fileName);
+        //            Console.WriteLine("Successfully serialised: {0}, Size {1:N0} bytes ({2:N2} MB)",
+        //                              fileName, fileInfo.Length, fileInfo.Length / 1024.0 / 1024.0);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Console.WriteLine("Unabled to serialise {0}: {1}\n", fileName, ex.Message);
+        //            Console.WriteLine("{0}", ex.ToString());
+        //        }
+        //    }
+
+        //    using (var file = File.OpenRead(fileName))
+        //    {
+        //        try
+        //        {
+        //            var result = Serializer.Deserialize<CLR.BitHelper>(file);
+        //            Console.WriteLine("Result: BitHelper[ 99] = {0}", result.IsMarked(99));
+        //            Console.WriteLine("Result: BitHelper[100] = {0}", result.IsMarked(100));
+        //            Console.WriteLine("Result: BitHelper[101] = {0}", result.IsMarked(101));
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Console.WriteLine("Unabled to serialise {0}: {1}\n", fileName, ex.Message);
+        //            Console.WriteLine("{0}", ex.ToString());
+        //        }
+        //    }
+
+        //    fileName = "Testing-BitArray-In-Dictionary.bin";
+        //    //var temp = new Dictionary<string, BitArray>();
+        //    var temp = new Dictionary<string, CLR.BitHelper>();
+        //    temp.Add("Testing", bitHelper);
+        //    temp.Add("MoreTesting", bitHelper);
+        //    using (var file = File.OpenWrite(fileName))
+        //    {
+        //        try
+        //        {
+        //            Serializer.Serialize(file, temp);
+        //            FileInfo fileInfo = new FileInfo(fileName);
+        //            Console.WriteLine("Successfully serialised: {0}, Size {1:N0} bytes ({2:N2} MB)",
+        //                              fileName, fileInfo.Length, fileInfo.Length / 1024.0 / 1024.0);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Console.WriteLine("Unabled to serialise {0}: {1}\n", fileName, ex.Message);
+        //            Console.WriteLine("{0}", ex.ToString());
+        //        }
+        //    }
+        //}
+
         private static List<Question> GetRawQuestionsFromDisk(string folder, string filename)
         {
             List<Question> rawQuestions;
-            var memoryBefore = GC.GetTotalMemory(true);
             var fileReadTimer = Stopwatch.StartNew();
             Console.WriteLine("DE-serialising the Stack Overflow Questions from the disk....");
             using (var file = File.OpenRead(Path.Combine(folder, filename)))
@@ -72,9 +156,11 @@ namespace StackOverflowTagServer
                 rawQuestions = Serializer.Deserialize<List<Question>>(file);
             }
             fileReadTimer.Stop();
-            var memoryAfter = GC.GetTotalMemory(true);
-            Console.WriteLine("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from the file, used {2:0.00} MB of memory\n",
-                                fileReadTimer.Elapsed, rawQuestions.Count, (memoryAfter - memoryBefore) / 1024.0 / 1024.0);
+
+            GC.Collect(2, GCCollectionMode.Forced);
+            var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            Console.WriteLine("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from disk - Using {2:N2} MB ({3:N2} GB) of memory\n",
+                                fileReadTimer.Elapsed, rawQuestions.Count, memoryUsed, memoryUsed / 1024.0);
 
             return rawQuestions;
         }
@@ -178,15 +264,12 @@ namespace StackOverflowTagServer
 
         private static void RunExclusionQueryTests(TagServer tagServer, HashSet expandedTags, int runsPerLoop)
         {
-            Results.CreateNewFile(string.Format("Results-{0}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss")));
-            //Results.AddHeaders("Count", "Fast", "Fast Alt", "Bloom");
+            Results.CreateNewFile(string.Format("Results-Exclusion-Queries-{0}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss")));
+            //Results.AddHeaders("Count", "Slow", "Fast", "Fast Alt"); // "Bloom"
             Results.AddHeaders("Count", "Fast", "Fast Alt");
 
             var amounts = new List<int>();
-            //for (decimal notQueries = (25.0m / 16.0m); notQueries <= 1600; notQueries *= 2)
             for (decimal notQueries = (25.0m / 16.0m); notQueries <= 6400; notQueries *= 2)
-            //for (decimal notQueries = 100m; notQueries <= 3200; notQueries *= 2)
-            //decimal notQueries = 12.0m;
             {
                 amounts.Add((int)notQueries);
             }
@@ -208,14 +291,14 @@ namespace StackOverflowTagServer
                     {
                         Results.AddData(excludedTags.Count.ToString());
 
-                        //var results1 = tagServer.BooleanQueryWithExclusionsSlowVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
-                        //var results2 = tagServer.BooleanQueryWithExclusionsFastVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
+                        //var results1 = tagServer.BooleanQueryWithExclusionsLINQVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
+                        var results2 = tagServer.BooleanQueryWithExclusionsFastVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
+                        var results3 = tagServer.BooleanQueryWithExclusionsFastAlternativeVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
+                        //var results4 = tagServer.BooleanQueryWithExclusionsBloomFilterVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
 
-                        var results1 = tagServer.BooleanQueryWithExclusionsFastVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
-                        var results2 = tagServer.BooleanQueryWithExclusionsFastAlternativeVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
-                        //var results3 = tagServer.BooleanQueryWithExclusionsBloomFilterVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
-                        CompareLists(listA: results1, nameA: "Fast", listB: results2, nameB: "FastAlternative");
-                        //CompareLists(listA: results2, nameA: "FastAlternative", listB: results3, nameB: "Bloom");
+                        //CompareLists(listA: results1, nameA: "Slow", listB: results2, nameB: "Fast");
+                        CompareLists(listA: results2, nameA: "Fast", listB: results3, nameB: "FastAlternative");
+                        //CompareLists(listA: results3, nameA: "FastAlternative", listB: results4, nameB: "Bloom");
 
                         Results.StartNewRow();
                     }
@@ -230,7 +313,7 @@ namespace StackOverflowTagServer
             //    var pageSize = 50;
             //    for (int i = 0; i < runsPerLoop; i++)
             //    {
-            //        var resultsSlow = tagServer.BooleanQueryWithExclusionsSlowVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
+            //        var resultsSlow = tagServer.BooleanQueryWithExclusionsLINQVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
             //        var resultsFast = tagServer.BooleanQueryWithExclusionsFastVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
             //        var resultsFastAlt = tagServer.BooleanQueryWithExclusionsFastAlternativeVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
             //        //tagServer.BooleanQueryWithExclusionsBloomFilterVersion(QueryType.Score, ".net", notQueries: 400, pageSize: pageSize, skip: (int)skip);
@@ -357,6 +440,72 @@ namespace StackOverflowTagServer
             Console.WriteLine("Max ViewCount {0}, Question Id {1}", mostViewed.ViewCount, mostViewed.Id);
             Console.WriteLine("Max Answers {0}, Question Id {1}", mostAnswers.AnswerCount, mostAnswers.Id);
             Console.WriteLine("Max Score {0}, Question Id {1}\n", highestScore.Score, highestScore.Id);            
+        }
+
+        private static void PrintTagStats(TagLookup allTags)
+        {
+            var histogram = new Dictionary<int, List<KeyValuePair<string, int>>>();
+            foreach (var tag in allTags)
+            {
+                if (tag.Key == TagServer.ALL_TAGS_KEY)
+                    continue;
+
+                var bucket = -1;
+                if (tag.Value <= 10)
+                    bucket = tag.Value;
+                else if (tag.Value < 100)
+                    bucket = ((tag.Value / 10) * 10) + 10;
+                else if (tag.Value < 1000)
+                    bucket = ((tag.Value / 100) * 100) + 100;
+                else if (tag.Value < 10000)
+                    bucket = ((tag.Value / 1000) * 1000) + 1000;
+                else if (tag.Value < 100000)
+                    bucket = ((tag.Value / 10000) * 10000) + 10000;
+                else if (tag.Value < 1000000)
+                    bucket = ((tag.Value / 100000) * 100000) + 100000;
+                else
+                    bucket = tag.Value;
+
+                if (bucket == -1)
+                {
+                    Console.WriteLine("Error: ({0}, {1})", tag.Key, tag.Value);
+                    continue;
+                }
+
+                if (histogram.ContainsKey(bucket))
+                {
+                    var bucketInfo = histogram[bucket];
+                    bucketInfo.Add(tag);
+                }
+                else
+                {
+                    var list = new List<KeyValuePair<string, int>> { tag };
+                    histogram.Add(bucket, list);
+                }
+            }
+
+            var tagCountCutoff = 25000; // 50000;
+            var topTags = allTags.Where(t => t.Value > tagCountCutoff && 
+                                             t.Key != TagServer.ALL_TAGS_KEY)
+                                 .Select(t => "\"" + t.Key + "\"")
+                                 .ToList();
+            Console.WriteLine("Tags with MORE than {0:N0} questions ({1} in total): ", tagCountCutoff, topTags.Count);
+            Console.WriteLine("{{ {0} }}", String.Join(", ", topTags));
+
+            Console.WriteLine();
+            foreach (var bucket in histogram.OrderByDescending(h => h.Key))
+            {
+                Console.WriteLine("{0,8:N0}: {1:N0}", bucket.Key, bucket.Value.Count);
+            }
+
+            //Console.WriteLine();
+            //foreach (var bucket in histogram.OrderByDescending(h => h.Key))
+            //{
+            //    if (bucket.Key > 10000)
+            //        Console.WriteLine("{0,8:N0}: {1:N0} -> {2}\n", 
+            //            bucket.Key, bucket.Value.Count, 
+            //            String.Join(", ", bucket.Value.Select(b => string.Format("[{0:N0}, {1:N0}]", b.Key, b.Value))));
+            //}
         }
 
 #region HelperMethods
