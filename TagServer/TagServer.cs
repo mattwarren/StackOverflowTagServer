@@ -26,8 +26,6 @@ namespace StackOverflowTagServer
         private static readonly List<string> messages = new List<string>();
         public static List<string> Messages { get { return messages; } }
 
-        //private readonly Dictionary<string, List<KeyValuePair<string, int>>> relatedTags;
-
         /// <summary> _ALL_TAGS_ </summary>
         public static string ALL_TAGS_KEY = "_ALL_TAGS_";
 
@@ -122,8 +120,6 @@ namespace StackOverflowTagServer
             queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
 
             var groupedTags = CreateTagGroupings();
-            //relatedTags = CreateRelatedTags(groupedTags);
-
             allTags = groupedTags.ToDictionary(t => t.Key, t => t.Value.Count);
 
             // These have to be initialised in the ctor, so they can remain readonly
@@ -307,45 +303,6 @@ namespace StackOverflowTagServer
                 tagGroupingTimer.Elapsed, tagGroupingTimer.ElapsedMilliseconds, mbUsed, mbUsed / 1024.0);
             return groupedTags;
         }
-
-        //private Dictionary<string, List<KeyValuePair<string, int>>> CreateRelatedTags(Dictionary<string, TagWithPositions> groupedTags)
-        //{
-        //    var relatedTagsTimer = Stopwatch.StartNew();
-        //    var relatedTagsTemp = new Dictionary<string, TagLookup>(groupedTags.Count);
-        //    foreach (var tag in groupedTags)
-        //    {
-        //        relatedTagsTemp.Add(tag.Key, new TagLookup());
-        //    }
-        //    foreach (var question in questions)
-        //    {
-        //        foreach (var tag in question.Tags)
-        //        {
-        //            foreach (var otherTag in question.Tags)
-        //            {
-        //                if (tag == otherTag)
-        //                    continue;
-        //
-        //                if (relatedTagsTemp[tag].ContainsKey(otherTag))
-        //                    relatedTagsTemp[tag][otherTag]++;
-        //                else
-        //                    relatedTagsTemp[tag].Add(otherTag, 1);
-        //            }
-        //        }
-        //    }
-        //    var relatedTags = new Dictionary<string, List<KeyValuePair<string, int>>>(groupedTags.Count);
-        //    foreach (var tag in relatedTagsTemp)
-        //    {
-        //        // Now we can go back and sort the related tags, so they are in descending order
-        //        relatedTags.Add(tag.Key, tag.Value.OrderByDescending(i => i.Value).ToList());
-        //    }
-        //    relatedTagsTimer.Stop();
-        //
-        //    GC.Collect(2, GCCollectionMode.Forced);
-        //    var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-        //    Log("Took {0} ({1:N0} ms) to create all the \"related\" tags info - Using {2:N2} MB ({3:N2} GB) of memory\n",
-        //                relatedTagsTimer.Elapsed, relatedTagsTimer.Elapsed.TotalMilliseconds, mbUsed, mbUsed / 1024.0);
-        //    return relatedTags;
-        //}
 
         private void CreateSortedLists(Dictionary<string, TagWithPositions> groupedTags)
         {
