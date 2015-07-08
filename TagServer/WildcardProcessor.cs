@@ -216,10 +216,9 @@ namespace StackOverflowTagServer
                         DoStartsWithOrEndsWithSearch(trie, tagToExpand, expandedTags);
                     }
 
-                    // TODO is there a better way to deal with *php*, i.e. matching in the middle of this string, 
-                    // The method below is to do a brute-force search, so kills our perf a bit!!!!
+                    // With a trie, brute-search is the only way to deal with *php*, i.e. matching in the middle of this string, 
                     // If we don't do this, we miss items that are in the middle i.e. *php* won't match "cakephp-1.0"
-                    bruteForceTimer.Start();                  
+                    bruteForceTimer.Start();
                     foreach (var tag in allTags)
                     {
                         if (tag.Key.Contains(actualTag) && expandedTags.Contains(tag.Key) == false)

@@ -10,7 +10,6 @@ using System.Threading;
 using HashSet = StackOverflowTagServer.CLR.HashSet<int>;
 //using HashSet = System.Collections.Generic.HashSet<int>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
-using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 namespace StackOverflowTagServer
 {
@@ -267,56 +266,9 @@ namespace StackOverflowTagServer
             //Console.WriteLine("\n");
 
             return result;
-        }
+        }     
 
-        internal List<Question> ComparisonQueryAdv(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip)
-        {
-            var timer = Stopwatch.StartNew();
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
-            //Func<Question, string> fieldSelector = GetFieldSelector(type);
-            ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
-            ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
-
-            var baseHashSet = GetCachedHashSet(queryInfo[tag1]);
-            switch (@operator)
-            {
-                //Use Intersect for AND, Union for OR and Except for NOT
-                case "AND":
-                    // TODO - this calculates EVERYTHING up front, it's NOT streaming/lazy like the LINQ methods!!
-                    var otherHashSet = new HashSet(queryInfo[tag2]);
-                    baseHashSet.IntersectWith(otherHashSet);
-                    break;
-                case "OR":
-                    //var otherHashSet = new HashSet(queryInfo[tag2]);
-                    //baseHashSet.
-                    //baseQuery = baseQuery.Union(queryInfo[tag2]);
-                    break;
-                case "NOT":
-                    //baseQuery = baseQuery.Except(queryInfo[tag2]);
-                    break;
-                default:
-                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
-            }
-
-            var result = baseHashSet.Skip(skip)
-                            .Take(pageSize)
-                            .Select(i => questions[i])
-                            .ToList();
-            timer.Stop();
-
-            var msg1 = String.Format("ADVANCED Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) ADVANCED",
-                                     tag1, @operator, tag2, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
-            Console.WriteLine(msg1);
-            Trace.Write(msg1);
-
-            var msg2 = String.Format("Got {0:} results in total", result.Count());
-            Console.WriteLine(msg2);
-            Trace.Write(msg2);
-
-            return result;
-        }
-
-        internal List<Question> BooleanQueryWithExclusionsSlowVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize, int skip)
+        internal List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize, int skip)
         {
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
@@ -337,9 +289,13 @@ namespace StackOverflowTagServer
             timer.Stop();
             gcInfo.UpdateCollectionInfo();
 
+            Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
             Console.WriteLine("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
-            Console.WriteLine("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - SLOW",
+            using (SetConsoleColour(GetColorForTimespan(timer.Elapsed)))
+            {
+                Console.WriteLine("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - SLOW",
                                     type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+            }
             Console.WriteLine("Got {0} results", results.Count());
             Console.WriteLine(gcInfo.ToString());
             //var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
