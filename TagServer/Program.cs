@@ -23,9 +23,6 @@ namespace StackOverflowTagServer
         {
             Console.WriteLine("IsServerGC: {0}, LatencyMode: {1}", GCSettings.IsServerGC, GCSettings.LatencyMode);
 
-            //TestSerialisationOfBitArrays();            
-            //return;
-
             var folder = @"C:\Users\warma11\Downloads\__GitHub__\StackOverflowTagServer\BinaryData\";
             var filename = @"Questions-NEW.bin";
             //var filename = @"Questions-subset.bin";
@@ -67,84 +64,7 @@ namespace StackOverflowTagServer
 
             Console.WriteLine("Finished, press <ENTER> to exit");
             Console.ReadLine();
-        }
-
-        //private static void TestSerialisationOfBitArrays()
-        //{
-        //    var bitArray = new BitArray(7990787);
-        //    bitArray.Set(10, true);
-        //    var BytesPerInt32 = 4;
-        //    var internalArraySize = ((bitArray.Count - 1) / BytesPerInt32) + 1;
-        //    Console.WriteLine("BitArray Length: {0:N0} Size: {1:N0} bytes ({2:N2} MB)",
-        //                      bitArray.Length, internalArraySize, internalArraySize / 1024.0 / 1024.0);
-
-        //    var BitsPerByte = 8;
-        //    var requiredLength = ((bitArray.Count - 1) / BitsPerByte) + 1;
-        //    Console.WriteLine("BitArray Required Length: {0:N0}", requiredLength);
-        //    var testByteArray = new byte[requiredLength]; // (requiredLength - 1) blow up!!
-        //    bitArray.CopyTo(testByteArray, 0);
-
-        //    var testIntArray = new int[internalArraySize];
-        //    bitArray.CopyTo(testIntArray, 0);
-
-        //    var bitHelper = new CLR.BitHelper(testIntArray, requiredLength);
-
-        //    var fileName = "Testing-BitArray.bin";
-        //    using (var file = File.OpenWrite(fileName))
-        //    {
-        //        try
-        //        {
-        //            //Serializer.Serialize(file, bitArray);
-        //            bitHelper.MarkBit(100);
-        //            Serializer.Serialize(file, bitHelper);
-        //            FileInfo fileInfo = new FileInfo(fileName);
-        //            Console.WriteLine("Successfully serialised: {0}, Size {1:N0} bytes ({2:N2} MB)",
-        //                              fileName, fileInfo.Length, fileInfo.Length / 1024.0 / 1024.0);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Console.WriteLine("Unabled to serialise {0}: {1}\n", fileName, ex.Message);
-        //            Console.WriteLine("{0}", ex.ToString());
-        //        }
-        //    }
-
-        //    using (var file = File.OpenRead(fileName))
-        //    {
-        //        try
-        //        {
-        //            var result = Serializer.Deserialize<CLR.BitHelper>(file);
-        //            Console.WriteLine("Result: BitHelper[ 99] = {0}", result.IsMarked(99));
-        //            Console.WriteLine("Result: BitHelper[100] = {0}", result.IsMarked(100));
-        //            Console.WriteLine("Result: BitHelper[101] = {0}", result.IsMarked(101));
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Console.WriteLine("Unabled to serialise {0}: {1}\n", fileName, ex.Message);
-        //            Console.WriteLine("{0}", ex.ToString());
-        //        }
-        //    }
-
-        //    fileName = "Testing-BitArray-In-Dictionary.bin";
-        //    //var temp = new Dictionary<string, BitArray>();
-        //    var temp = new Dictionary<string, CLR.BitHelper>();
-        //    temp.Add("Testing", bitHelper);
-        //    temp.Add("MoreTesting", bitHelper);
-        //    using (var file = File.OpenWrite(fileName))
-        //    {
-        //        try
-        //        {
-        //            Serializer.Serialize(file, temp);
-        //            FileInfo fileInfo = new FileInfo(fileName);
-        //            Console.WriteLine("Successfully serialised: {0}, Size {1:N0} bytes ({2:N2} MB)",
-        //                              fileName, fileInfo.Length, fileInfo.Length / 1024.0 / 1024.0);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Console.WriteLine("Unabled to serialise {0}: {1}\n", fileName, ex.Message);
-        //            Console.WriteLine("{0}", ex.ToString());
-        //        }
-        //    }
-        //}
+        }     
 
         private static List<Question> GetRawQuestionsFromDisk(string folder, string filename)
         {
