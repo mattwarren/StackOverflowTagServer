@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using ProtoBuf;
 
 namespace StackOverflowTagServer.CLR
 {
@@ -39,6 +36,7 @@ namespace StackOverflowTagServer.CLR
     /// 
     /// 
 
+    [ProtoContract(UseProtoMembersOnly = true, SkipConstructor = true)]
     unsafe internal class BitHelper
     {   // should not be serialized
 
@@ -46,6 +44,7 @@ namespace StackOverflowTagServer.CLR
         private const byte IntSize = 32;
 
         // m_length of underlying int array (not logical bit array)
+        [ProtoMember(1)]
         private int m_length;
 
         // ptr to stack alloc'd array of ints
@@ -53,6 +52,7 @@ namespace StackOverflowTagServer.CLR
         private int* m_arrayPtr;
 
         // array of ints
+        [ProtoMember(2, IsPacked = true)]
         private int[] m_array;
 
         // whether to operate on stack alloc'd or heap alloc'd array 
@@ -146,5 +146,10 @@ namespace StackOverflowTagServer.CLR
             return n > 0 ? ((n - 1) / IntSize + 1) : 0;
         }
 
+        // TODO implement the following methods ("borrowed" from BitArray in the CLR):
+        //   - And http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932
+        //   - Or  http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,d6b98dd3d39e346e
+        //   - Xor http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932
+        //   - Not http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,e71a526d814e6d57
     }
 }
