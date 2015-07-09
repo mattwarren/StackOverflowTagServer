@@ -114,6 +114,12 @@ namespace StackOverflowTagServer
             return tagServer;
         }
 
+        public int TotalCount(QueryType type, string tag)
+        {
+            TagByQueryLookup queryInfo = GetTagLookupForQueryType(type);
+            return queryInfo[tag].Length;
+        }
+
         private TagServer(List<Question> questionsList)
         {
             questions = questionsList;
@@ -174,12 +180,6 @@ namespace StackOverflowTagServer
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             Log("After TagServer created - Using {0:N2} MB ({1:N2} GB) of memory in total\n", mbUsed, mbUsed / 1024.0);
-        }
-
-        public int TotalCount(QueryType type, string tag)
-        {
-            TagByQueryLookup queryInfo = GetTagLookupForQueryType(type);
-            return queryInfo[tag].Length;
         }
 
 #region QueryApiPassedThruToQueryProcessor
@@ -311,6 +311,7 @@ namespace StackOverflowTagServer
             // TODO put this back, it's only sorting the Tag ALL_TAGS_KEY !!!!
             foreach (var tag in groupedTags)
             //foreach (var tag in groupedTags.Where(t => t.Key == ALL_TAGS_KEY))
+            //foreach (var tag in groupedTags.Where(t => t.Key != ALL_TAGS_KEY))
             {
                 tagsByAnswerCount.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, comparer.AnswerCount));
                 tagsByCreationDate.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, comparer.CreationDate));
@@ -343,11 +344,11 @@ namespace StackOverflowTagServer
             var tagsToUse = GetTagsToUseForBitSets();
             foreach (var tagToUse in tagsToUse)
             {
-                tagsByAnswerCountBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], questions.Count));
-                tagsByCreationDateBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], questions.Count));
-                tagsByLastActivityDateBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], questions.Count));
-                tagsByScoreBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], questions.Count));
-                tagsByViewCountBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], questions.Count));
+                tagsByAnswerCountBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
+                tagsByCreationDateBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
+                tagsByLastActivityDateBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
+                tagsByScoreBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
+                tagsByViewCountBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
             }
 
             Log("tagsByAnswerCountBitSet      contains {0:N0}, exptected {1:N0}", tagsByAnswerCountBitSet.Count, tagsToUse.Length);

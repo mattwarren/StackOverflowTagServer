@@ -35,12 +35,10 @@ namespace StackOverflowTagServer.CLR
     /// IsMarked -- pass in values as indices into the logical bit array, and it will be mapped
     /// to the position within the array of ints.
     /// 
-    /// 
 
     [ProtoContract(UseProtoMembersOnly = true, SkipConstructor = true)]
     unsafe internal class BitHelper
-    {   // should not be serialized
-
+    {
         private const byte MarkedBitFlag = 1;
         private const byte IntSize = 32;
 
@@ -67,8 +65,8 @@ namespace StackOverflowTagServer.CLR
         [System.Security.SecurityCritical]
         internal BitHelper(int* bitArrayPtr, int length)
         {
-            this.m_arrayPtr = bitArrayPtr;
-            this.m_length = length;
+            m_arrayPtr = bitArrayPtr;
+            m_length = length;
             useStackAlloc = true;
         }
 
@@ -79,8 +77,8 @@ namespace StackOverflowTagServer.CLR
         /// <param name="length">length of int array</param>
         internal BitHelper(int[] bitArray, int length)
         {
-            this.m_array = bitArray;
-            this.m_length = length;
+            m_array = bitArray;
+            m_length = length;
         }
 
         /// <summary>
@@ -89,26 +87,19 @@ namespace StackOverflowTagServer.CLR
         /// <param name="bitPosition"></param>
         [System.Security.SecuritySafeCritical]
         internal unsafe void MarkBit(int bitPosition)
-        {
-            if (useStackAlloc)
+        {                                                
+            int bitArrayIndex = bitPosition / IntSize;
+            if (bitArrayIndex < m_length && bitArrayIndex >= 0)
             {
-                int bitArrayIndex = bitPosition / IntSize;
-                if (bitArrayIndex < m_length && bitArrayIndex >= 0)
-                {
+                if (useStackAlloc)
                     m_arrayPtr[bitArrayIndex] |= (MarkedBitFlag << (bitPosition % IntSize));
-                }
+                else
+                    m_array[bitArrayIndex] |= (MarkedBitFlag << (bitPosition % IntSize));
             }
             else
             {
-                int bitArrayIndex = bitPosition / IntSize;
-                if (bitArrayIndex < m_length && bitArrayIndex >= 0)
-                {
-                    m_array[bitArrayIndex] |= (MarkedBitFlag << (bitPosition % IntSize));
-                }
-                else
-                {
-                    throw new ArgumentOutOfRangeException("bitPosition", String.Format("Must be less than {0}, but was {1} ({2})", m_length, bitArrayIndex, bitPosition));
-                }
+                throw new ArgumentOutOfRangeException("bitPosition", 
+                            String.Format("Must be less than {0}, but was {1} (bitPosition:{2})", m_length, bitArrayIndex, bitPosition));
             }
         }
 
@@ -120,24 +111,97 @@ namespace StackOverflowTagServer.CLR
         [System.Security.SecuritySafeCritical]
         internal unsafe bool IsMarked(int bitPosition)
         {
-            if (useStackAlloc)
+            int bitArrayIndex = bitPosition / IntSize;
+            if (bitArrayIndex < m_length && bitArrayIndex >= 0)
             {
-                int bitArrayIndex = bitPosition / IntSize;
-                if (bitArrayIndex < m_length && bitArrayIndex >= 0)
-                {
+                if (useStackAlloc)
                     return ((m_arrayPtr[bitArrayIndex] & (MarkedBitFlag << (bitPosition % IntSize))) != 0);
-                }
-                return false;
+                else
+                    return ((m_array[bitArrayIndex] & (MarkedBitFlag << (bitPosition % IntSize))) != 0);                
             }
             else
             {
-                int bitArrayIndex = bitPosition / IntSize;
-                if (bitArrayIndex < m_length && bitArrayIndex >= 0)
-                {
-                    return ((m_array[bitArrayIndex] & (MarkedBitFlag << (bitPosition % IntSize))) != 0);
-                }
-                return false;
+                // return false??!?!?
+                throw new ArgumentOutOfRangeException("bitPosition", 
+                            String.Format("Must be less than {0}, but was {1} (bitPosition:{2})", m_length, bitArrayIndex, bitPosition));
             }
+        }
+
+        /// <summary>
+        /// Returns a reference to the current instance ANDed with value.
+        /// Code from And http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932 
+        /// </summary>        
+        internal BitHelper And(BitHelper value)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+            if (m_length != value.m_length)
+                throw new ArgumentException(String.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
+
+            for (int i = 0; i < m_array.Length; i++)
+            {
+                m_array[i] &= value.m_array[i];
+            }
+
+            //_version++;
+            return this;
+        }
+
+        /// <summary>
+        /// Returns a reference to the current instance ORed with value.
+        /// Code from Or http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,d6b98dd3d39e346e
+        /// </summary>        
+        internal BitHelper Or(BitHelper value)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+            if (m_length != value.m_length)
+                throw new ArgumentException(String.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
+
+            for (int i = 0; i < m_array.Length; i++)
+            {
+                m_array[i] |= value.m_array[i];
+            }
+
+            //_version++;
+            return this;
+        }
+
+        /// <summary>
+        /// Returns a reference to the current instance XORed with value.
+        /// Code from Xor http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932
+        /// </summary>        
+        internal BitHelper Xor(BitHelper value)
+        {
+            if (value == null)
+                throw new ArgumentNullException("value");
+            if (m_length != value.m_length)
+                throw new ArgumentException(String.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
+
+            for (int i = 0; i < m_array.Length; i++)
+            {
+                m_array[i] ^= value.m_array[i];
+            }
+
+            //_version++;
+            return this;
+        }
+
+        /// <summary>
+        /// Inverts all the bit values. On/true bit values are converted to off/false. 
+        /// Off/false bit values are turned on/true. The current instance is updated and returned.
+        /// Code from Not http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,e71a526d814e6d57
+        /// </summary>
+        /// <returns></returns>
+        internal BitHelper Not()
+        {
+            for (int i = 0; i < m_array.Length; i++)
+            {
+                m_array[i] = ~m_array[i];
+            }
+
+            //_version++;
+            return this;
         }
 
         /// <summary>
@@ -149,12 +213,6 @@ namespace StackOverflowTagServer.CLR
         internal static int ToIntArrayLength(int n)
         {
             return n > 0 ? ((n - 1) / IntSize + 1) : 0;
-        }
-
-        // TODO implement the following methods ("borrowed" from BitArray in the CLR):
-        //   - And http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932
-        //   - Or  http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,d6b98dd3d39e346e
-        //   - Xor http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932
-        //   - Not http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,e71a526d814e6d57
+        }        
     }
 }
