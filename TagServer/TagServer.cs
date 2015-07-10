@@ -141,13 +141,7 @@ namespace StackOverflowTagServer
             tagsByLastActivityDateBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
             tagsByScoreBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
             tagsByViewCountBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-
-            //Took 00:01:53.6553645 (113,655 ms) to sort the 191,030 arrays - Using 4,537.50 MB (4.43 GB) of memory
-            //Took 00:01:55.2932862 (115,293 ms) to sort the 191,030 arrays - Using 4,537.50 MB (4.43 GB) of memory
-            //CreateSortedLists(groupedTags);
-
-            //Took 00:00:11.2802896 (11,280 ms) to sort the 191,030 arrays ALTERNATIVE method - Using 4,537.50 MB (4.43 GB) of memory
-            //Took 00:00:11.4762493 (11,476 ms) to sort the 191,030 arrays ALTERNATIVE method - Using 4,537.50 MB (4.43 GB) of memory
+            
             CreateSortedLists(groupedTags, useAlternativeMethod: true);
 
             CreateBitSets(groupedTags);            
@@ -313,29 +307,20 @@ namespace StackOverflowTagServer
 
         private void CreateSortedLists(Dictionary<string, TagWithPositions> groupedTags, bool useAlternativeMethod = false)
         {
-            var comparer = new Comparer(questions);
+            //New faster sorting method:
+            //    Took 00:00:11.2802896 (11,280 ms) to sort the 191,030 arrays ALTERNATIVE method - Using 4,537.50 MB (4.43 GB) of memory
+            //    Took 00:00:11.4762493 (11,476 ms) to sort the 191,030 arrays ALTERNATIVE method - Using 4,537.50 MB (4.43 GB) of memory
+            //Old slower way of doing it (using a custom Comparer and indexing into the Questions array for each comparision):
+            //    Took 00:01:53.6553645 (113,655 ms) to sort the 191,030 arrays - Using 4,537.50 MB (4.43 GB) of memory
+            //    Took 00:01:55.2932862 (115,293 ms) to sort the 191,030 arrays - Using 4,537.50 MB (4.43 GB) of memory
             var sortingTimer = Stopwatch.StartNew();
-            // TODO put this back, it's only sorting the Tag ALL_TAGS_KEY !!!!
             foreach (var tag in groupedTags)
-            //foreach (var tag in groupedTags.Where(t => t.Key == ALL_TAGS_KEY))
-            //foreach (var tag in groupedTags.Where(t => t.Key != ALL_TAGS_KEY))
             {
-                if (useAlternativeMethod)
-                {
-                    tagsByAnswerCount.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.AnswerCount));
-                    tagsByCreationDate.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.CreationDate));
-                    tagsByLastActivityDate.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.LastActivityDate));
-                    tagsByScore.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.Score));
-                    tagsByViewCount.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.ViewCount));
-                }
-                else
-                {
-                    tagsByAnswerCount.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, comparer.AnswerCount));
-                    tagsByCreationDate.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, comparer.CreationDate));
-                    tagsByLastActivityDate.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, comparer.LastActivityDate));
-                    tagsByScore.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, comparer.Score));
-                    tagsByViewCount.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, comparer.ViewCount));
-                }
+                tagsByAnswerCount.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.AnswerCount));
+                tagsByCreationDate.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.CreationDate));
+                tagsByLastActivityDate.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.LastActivityDate));
+                tagsByScore.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.Score));
+                tagsByViewCount.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.ViewCount));                
             }
             sortingTimer.Stop();
 
@@ -344,16 +329,7 @@ namespace StackOverflowTagServer
             Log("Took {0} ({1:N0} ms) to sort the {2:N0} arrays {3}- Using {4:N2} MB ({5:N2} GB) of memory\n",
                 sortingTimer.Elapsed, sortingTimer.ElapsedMilliseconds, groupedTags.Count * 5, 
                 useAlternativeMethod ? "ALTERNATIVE method " : "", memoryUsed, memoryUsed / 1024.0);
-        }
-
-        private int[] CreateSortedArrayForTag(int[] originalArray, Comparison<int> comparer)
-        {
-            // We need to first copy the original data and then sort it
-            var unsortedArray = new int[originalArray.Length];
-            originalArray.CopyTo(unsortedArray, index: 0);
-            Array.Sort(unsortedArray, comparer);
-            return unsortedArray; // this is now sorted!!
-        }
+        }        
 
         private int[] CreateSortedArrayForTagAlternativeMethod(int[] positions, QueryType queryType)
         {
@@ -390,6 +366,7 @@ namespace StackOverflowTagServer
             // TODO it would be nicer if we could just sort in reverse order, but the overload doesn't seem to allow that!!
             //var reverserComparer = new Comparison<int>((i1, i2) => i1.CompareTo(i2));
             Array.Sort(unsortedArray, indices);
+            // We want all the items to be sorted descending, i.e. highest first
             Array.Reverse(indices);
             return indices; // this is now sorted!!
         }
