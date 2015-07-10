@@ -47,7 +47,7 @@ namespace StackOverflowTagServer
                     counter++;
                 }
                 if (counter != tag.Value.Count())
-                    Log("ERROR - Tag {0}, Checked {1} items, Expected {2}", tag.Key, counter, tag.Value.Count());
+                    Log("ERROR - Tag {0}, Checked {1} items, Expected to Check {2} items", tag.Key, counter, tag.Value.Count());
             }
         }
     }
