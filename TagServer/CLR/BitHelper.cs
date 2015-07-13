@@ -1,5 +1,4 @@
-﻿using ProtoBuf;
-using System;
+﻿using System;
 
 namespace StackOverflowTagServer.CLR
 {
@@ -36,14 +35,12 @@ namespace StackOverflowTagServer.CLR
     /// to the position within the array of ints.
     /// 
 
-    [ProtoContract(UseProtoMembersOnly = true, SkipConstructor = true)]
     unsafe internal class BitHelper
     {
         private const byte MarkedBitFlag = 1;
         private const byte IntSize = 32;
 
         // m_length of underlying int array (not logical bit array)
-        [ProtoMember(1)]
         private int m_length;
 
         // ptr to stack alloc'd array of ints
@@ -51,7 +48,6 @@ namespace StackOverflowTagServer.CLR
         private int* m_arrayPtr;
 
         // array of ints
-        [ProtoMember(2, IsPacked = true)]
         private int[] m_array;
 
         // whether to operate on stack alloc'd or heap alloc'd array 
@@ -99,7 +95,7 @@ namespace StackOverflowTagServer.CLR
             else
             {
                 throw new ArgumentOutOfRangeException("bitPosition", 
-                            String.Format("Must be less than {0}, but was {1} (bitPosition:{2})", m_length, bitArrayIndex, bitPosition));
+                            string.Format("Must be less than {0}, but was {1} (bitPosition:{2})", m_length, bitArrayIndex, bitPosition));
             }
         }
 
@@ -121,87 +117,10 @@ namespace StackOverflowTagServer.CLR
             }
             else
             {
-                // return false??!?!?
-                throw new ArgumentOutOfRangeException("bitPosition", 
-                            String.Format("Must be less than {0}, but was {1} (bitPosition:{2})", m_length, bitArrayIndex, bitPosition));
+                return false; // This seems wierd
+                //throw new ArgumentOutOfRangeException("bitPosition", 
+                //            string.Format("Must be less than {0}, but was {1} (bitPosition:{2})", m_length, bitArrayIndex, bitPosition));
             }
-        }
-
-        /// <summary>
-        /// Returns a reference to the current instance ANDed with value.
-        /// Code from And http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932 
-        /// </summary>        
-        internal BitHelper And(BitHelper value)
-        {
-            if (value == null)
-                throw new ArgumentNullException("value");
-            if (m_length != value.m_length)
-                throw new ArgumentException(String.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
-
-            for (int i = 0; i < m_array.Length; i++)
-            {
-                m_array[i] &= value.m_array[i];
-            }
-
-            //_version++;
-            return this;
-        }
-
-        /// <summary>
-        /// Returns a reference to the current instance ORed with value.
-        /// Code from Or http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,d6b98dd3d39e346e
-        /// </summary>        
-        internal BitHelper Or(BitHelper value)
-        {
-            if (value == null)
-                throw new ArgumentNullException("value");
-            if (m_length != value.m_length)
-                throw new ArgumentException(String.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
-
-            for (int i = 0; i < m_array.Length; i++)
-            {
-                m_array[i] |= value.m_array[i];
-            }
-
-            //_version++;
-            return this;
-        }
-
-        /// <summary>
-        /// Returns a reference to the current instance XORed with value.
-        /// Code from Xor http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932
-        /// </summary>        
-        internal BitHelper Xor(BitHelper value)
-        {
-            if (value == null)
-                throw new ArgumentNullException("value");
-            if (m_length != value.m_length)
-                throw new ArgumentException(String.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
-
-            for (int i = 0; i < m_array.Length; i++)
-            {
-                m_array[i] ^= value.m_array[i];
-            }
-
-            //_version++;
-            return this;
-        }
-
-        /// <summary>
-        /// Inverts all the bit values. On/true bit values are converted to off/false. 
-        /// Off/false bit values are turned on/true. The current instance is updated and returned.
-        /// Code from Not http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,e71a526d814e6d57
-        /// </summary>
-        /// <returns></returns>
-        internal BitHelper Not()
-        {
-            for (int i = 0; i < m_array.Length; i++)
-            {
-                m_array[i] = ~m_array[i];
-            }
-
-            //_version++;
-            return this;
         }
 
         /// <summary>

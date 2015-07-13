@@ -7,7 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
-using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.CLR.BitHelper>;
+using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.DataStructures.BitSet>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
@@ -69,7 +69,8 @@ namespace StackOverflowTagServer
         {
             var tagServer = new TagServer(rawQuestions);
             var serializeTimer = Stopwatch.StartNew();
-            Log("Serialisation folder: {0}", intermediateFilesFolder);
+            Log("Serialisation folder: {0}", intermediateFilesFolder);            
+
             foreach (QueryType type in (QueryType[])Enum.GetValues(typeof(QueryType)))
             {
                 var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
@@ -86,6 +87,43 @@ namespace StackOverflowTagServer
             return tagServer;
         }
 
+
+        public static void TestBitSets(string intermediateFilesFolder)
+        {
+            var memoryUsageBefore = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            var size = BitSet.ToIntArrayLength(8000000);
+            int numBitSets = 100; // 1; // 4;
+            var dictionaryTest = new Dictionary<string, BitSet>();
+            for (int i = 0; i < numBitSets; i++)
+            {
+                var test = new int[size];
+                var testBit = new BitSet(test, size);
+                testBit.MarkBit(i);
+                dictionaryTest.Add(i.ToString(), testBit);
+            }
+            //var memoryUsageAfter = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            //Console.WriteLine("Using {0:N2} MB", memoryUsageAfter - memoryUsageBefore);
+            //var sizeofBitSet = (sizeof(int) * size) / 1024.0 / 1024.0;
+            //Console.WriteLine("Comparison {0:N2} MB", sizeofBitSet);
+            //var nTags = 2398;
+            //Console.WriteLine("For {0:N0} Tags, {1:N2} MB", nTags, sizeofBitSet * nTags);
+            //var temp = testBit.IsMarked(123);           
+
+            var memoryUsageAfter = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            Console.WriteLine("Using {0:N2} MB", memoryUsageAfter - memoryUsageBefore);
+            var sizeofBitSet = (sizeof(int) * size) / 1024.0 / 1024.0;
+            Console.WriteLine("Comparison {0:N2} MB (sizeof(int) = {1} bytes)", sizeofBitSet * numBitSets, sizeof(int));
+
+            //SerialiseToDisk("BitSet-Testing.bin", intermediateFilesFolder, testBit);
+            SerialiseToDisk("BitSet-Testing.bin", intermediateFilesFolder, dictionaryTest);
+            var info = new FileInfo(Path.Combine(intermediateFilesFolder, "BitSet-Testing.bin"));
+            var fileSize = info.Length;
+            Console.WriteLine("Filesize: {0:N2} MB", fileSize / 1024.0 / 1024.0);
+            var rtt = DeserialiseFromDisk<Dictionary<string, BitSet>>("BitSet-Testing.bin", intermediateFilesFolder);
+            var rttLengh = rtt["0"].InternalArray.Length;
+            var temp = fileSize + 1;
+        }
+
         public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder)
         {                        
             var deserializeTimer = Stopwatch.StartNew();
@@ -98,12 +136,12 @@ namespace StackOverflowTagServer
                 var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
                 var tempLookup = DeserialiseFromDisk<TagByQueryLookup>(tagLookupFileName, intermediateFilesFolder);
                 intermediateLookups.Add(type, tempLookup);
-                Log("{0,20} contains Lookups {1:N0}", type, tempLookup.Count);
+                Log("{0,20} contains {1:N0} Lookups", type, tempLookup.Count);
 
                 var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
                 var tempBitSet = DeserialiseFromDisk<TagByQueryLookupBitSet>(bitSetFileName, intermediateFilesFolder);
                 intermediateBitSets.Add(type, tempBitSet);
-                Log("{0,20} contains BitSets {1:N0}", type, tempBitSet.Count);
+                Log("{0,20} contains {1:N0} BitSets", type, tempBitSet.Count);
             }
             // Now fetch from disk the AllTags Lookup, Tag -> Count (i.e. "C#" -> 579,321, "Java" -> 560,432)
             var allTags = DeserialiseFromDisk<TagLookup>(AllTagsFileName, intermediateFilesFolder);
@@ -111,6 +149,40 @@ namespace StackOverflowTagServer
             Log("\nTook {0} (in TOTAL) to DE-serialise the intermediate data FROM disk\n", deserializeTimer.Elapsed);
 
             var tagServer = new TagServer(rawQuestions, allTags, intermediateLookups, intermediateBitSets);
+
+            var bitSetTimer = Stopwatch.StartNew();
+            var byAnswerCount = intermediateBitSets[QueryType.AnswerCount];
+            var cSharp = byAnswerCount["c#"];
+            var jQuery = byAnswerCount["jquery"];
+            var takeValue = 3; // 10; // for hex
+            var skipValue = 5;
+            string formatString = "X8", spacer = " ";            
+
+            Console.WriteLine("cSharp:        {0}",
+                              //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+                              String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+            Console.WriteLine("jQuery:        {0}",
+                              //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+                              String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+
+            jQuery.Not(); // Edits in-place, for real queries we NEED to make a copy
+            Console.WriteLine("NOT jQuery:    {0}",
+                              //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+                              String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+
+            cSharp.Or(jQuery); // Edits in-place, for real queries we NEED to make a copy
+            Console.WriteLine("cSharp OR (NOT jQuery)");
+
+            //cSharp.And(jQuery); // Edits in-place, for real queries we NEED to make a copy
+            //Console.WriteLine("cSharp AND (NOT jQuery)");
+
+            Console.WriteLine("cSharp Result: {0}",
+                              //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+                              String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+
+            bitSetTimer.Stop();
+            Log("Took {0} ({1:N0} ms) to do C# Or (Not jQuery)\n", bitSetTimer.Elapsed, bitSetTimer.ElapsedMilliseconds);
+
             return tagServer;
         }
 
@@ -146,8 +218,8 @@ namespace StackOverflowTagServer
 
             CreateBitSets(groupedTags);            
 
-            ValidateTagOrdering();
-            ValidateBitSetOrdering();
+            //ValidateTagOrdering();
+            //ValidateBitSetOrdering();
 
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
@@ -375,33 +447,33 @@ namespace StackOverflowTagServer
         {
             // First create all the BitSets we'll need, one per/Tag, per/QueryType
             var bitSetsTimer = Stopwatch.StartNew();
-            var arraySize = CLR.BitHelper.ToIntArrayLength(questions.Count);
-            var tagsToUse = GetTagsToUseForBitSets();
+            var arraySize = BitSet.ToIntArrayLength(questions.Count);
+            var tagsToUse = GetTagsToUseForBitSets(questionsPerTag: 1000); // 1000 = 2,397 Tags (out of 38,206)
             foreach (var tagToUse in tagsToUse)
             {
-                tagsByAnswerCountBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
-                tagsByCreationDateBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
-                tagsByLastActivityDateBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
-                tagsByScoreBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
-                tagsByViewCountBitSet.Add(tagToUse, new CLR.BitHelper(new int[arraySize], arraySize));
+                tagsByAnswerCountBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
+                tagsByCreationDateBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
+                tagsByLastActivityDateBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
+                tagsByScoreBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
+                tagsByViewCountBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
             }
 
-            Log("tagsByAnswerCountBitSet      contains {0:N0}, exptected {1:N0}", tagsByAnswerCountBitSet.Count, tagsToUse.Length);
-            Log("tagsByCreationDateBitSet     contains {0:N0}, exptected {1:N0}", tagsByCreationDateBitSet.Count, tagsToUse.Length);
-            Log("tagsByLastActivityDateBitSet contains {0:N0}, exptected {1:N0}", tagsByLastActivityDateBitSet.Count, tagsToUse.Length);
-            Log("tagsByScoreBitSet            contains {0:N0}, exptected {1:N0}", tagsByScoreBitSet.Count, tagsToUse.Length);
-            Log("tagsByViewCountBitSet        contains {0:N0}, exptected {1:N0}", tagsByViewCountBitSet.Count, tagsToUse.Length);
+            //Log("tagsByAnswerCountBitSet      contains {0:N0}, expected {1:N0}", tagsByAnswerCountBitSet.Count, tagsToUse.Length);
+            //Log("tagsByCreationDateBitSet     contains {0:N0}, expected {1:N0}", tagsByCreationDateBitSet.Count, tagsToUse.Length);
+            //Log("tagsByLastActivityDateBitSet contains {0:N0}, expected {1:N0}", tagsByLastActivityDateBitSet.Count, tagsToUse.Length);
+            //Log("tagsByScoreBitSet            contains {0:N0}, expected {1:N0}", tagsByScoreBitSet.Count, tagsToUse.Length);
+            //Log("tagsByViewCountBitSet        contains {0:N0}, expected {1:N0}", tagsByViewCountBitSet.Count, tagsToUse.Length);
 
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;                    
-            Log("Created {0:N0} BitSets in total (one per/Tag, per/QueryType, for {1:N0} Tags) - Using {2:N2} MB ({3:N2} GB) of memory",
+            Log("Created {0:N0} BitSets in total (one per/Tag, per/QueryType, for {1:N0} Tags) - Using {2:N2} MB ({3:N2} GB) of memory\n",
                 tagsToUse.Length * 5, tagsToUse.Length, mbUsed, mbUsed / 1024.0);
             
             // Now populate the BitSets
             foreach (QueryType queryType in Enum.GetValues(typeof(QueryType)))
             {
                 var questionsForQuery = GetTagLookupForQueryType(queryType)[ALL_TAGS_KEY];
-                var temp = new Dictionary<string, int>();
+                var sanityCheck = new Dictionary<string, int>();
                 foreach (var item in questionsForQuery.Select((QuestionId, Index) => new { QuestionId, Index }))
                 {
                     var question = questions[item.QuestionId];
@@ -413,18 +485,24 @@ namespace StackOverflowTagServer
                     {
                         bitSetsForQuery[tag].MarkBit(item.Index);
 
-                        if (temp.ContainsKey(tag))
-                            temp[tag]++;
+                        if (sanityCheck.ContainsKey(tag))
+                            sanityCheck[tag]++;
                         else
-                            temp.Add(tag, 1);
+                            sanityCheck.Add(tag, 1);
                     }
                 }
-
-                Log("Results for {0}:", queryType);
-                foreach (var item in temp.OrderByDescending(t => t.Value))
+                
+                foreach (var item in sanityCheck.OrderByDescending(t => t.Value))
                 {
+                    var firstError = true;
                     if (allTags[item.Key] != item.Value)
                     {
+                        if (firstError)
+                        {
+                            Log("Errors in BitSets for {0}:", queryType);
+                            firstError = false;
+                        }
+
                         var errorText = allTags[item.Key] != item.Value ?
                                             String.Format(" *** Error expected {0}, but got {1} ***", allTags[item.Key], item.Value) : "";
                         Log("\t[{0}, {1:N0}]{2}", item.Key, item.Value, errorText);
@@ -436,37 +514,18 @@ namespace StackOverflowTagServer
             GC.Collect(2, GCCollectionMode.Forced);
             var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             Log("Took {0} ({1:N0} ms) to create the {2:N0} Bit Sets - Using {3:N2} MB ({4:N2} GB) of memory in total\n",
-                bitSetsTimer.Elapsed, bitSetsTimer.ElapsedMilliseconds, groupedTags.Count * 5, memoryUsed, memoryUsed / 1024.0);            
+                bitSetsTimer.Elapsed, bitSetsTimer.ElapsedMilliseconds, tagsToUse.Length * 5, memoryUsed, memoryUsed / 1024.0);            
         }
 
-        private string[] GetTagsToUseForBitSets()
+        private string[] GetTagsToUseForBitSets(int questionsPerTag)
         {
-            // Tags with MORE than 50,000 questions(48 in total)
-            //var tagsToUse = new[] {
-            //    "java", "c#", "javascript", "php", "android", "jquery", "python", "html", "c++", "mysql", "ios", "css", "sql",
-            //    "asp.net", "objective-c", "iphone", ".net", "ruby-on-rails", "c", "ruby", "sql-server", "arrays", "ajax", "xml",
-            //    "regex", "asp.net-mvc", "wpf", "json", "linux", "database", "django", "vb.net", "eclipse", "windows", "xcode",
-            //    "r", "string", "html5", "facebook", "multithreading", "wordpress", "node.js", "angularjs", "image", "winforms",
-            //    "ruby-on-rails-3", "excel", "spring"
-            //};
-
-            //Tags with MORE than 25,000 questions(113 in total)
-            var tagsToUse = new[] {
-               "java", "c#", "javascript", "php", "android", "jquery", "python", "html", "c++", "mysql", "ios", "css", "sql",
-                "asp.net", "objective-c", "iphone", ".net", "ruby-on-rails", "c", "ruby", "sql-server", "arrays", "ajax", "xml",
-                "regex", "asp.net-mvc", "wpf", "json", "linux", "database", "django", "vb.net", "eclipse", "windows", "xcode",
-                "r", "string", "html5", "facebook", "multithreading", "wordpress", "node.js", "angularjs", "image", "winforms",
-                "ruby-on-rails-3", "excel", "spring", "forms", "osx", "oracle", "performance", "git", "swing", "algorithm",
-                "apache", "visual-studio-2010", "linq", "bash", "entity-framework", "web-services", "perl", "wcf", "hibernate",
-                "asp.net-mvc-3", "visual-studio", "sql-server-2008", "matlab", "actionscript-3", "qt", "list", ".htaccess",
-                "mongodb", "sqlite", "css3", "file", "vba", "function", "api", "codeigniter", "ipad", "postgresql", "cocoa",
-                "cocoa-touch", "class", "twitter-bootstrap", "flash", "google-maps", "shell", "jquery-ui", "jsp", "tsql",
-                "scala", "security", "delphi", "sockets", "asp.net-mvc-4", "validation", "google-app-engine", "unit-testing",
-                "internet-explorer", "xaml", "oop", "silverlight", "google-chrome", "rest", "maven", "email", "magento",
-                "uitableview", "android-layout", "parsing", "http"
-            };
-
-            return tagsToUse;
+            // There are 48    Tags with MORE than 50,000 questions
+            // There are 113   Tags with MORE than 25,000 questions
+            // There are 2,397 Tags with MORE than  1,000 questions
+            return allTags.OrderByDescending(t => t.Value)
+                          .Where(t => t.Value > questionsPerTag)
+                          .Select(t => t.Key)
+                          .ToArray();
         }
 
         private void ValidateTagOrdering()
