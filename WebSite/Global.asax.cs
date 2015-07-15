@@ -47,55 +47,63 @@ namespace Server
             ListFolderInfo(dataFolder);
             Trace.WriteLine("Finished listing contents of Data folder: " + dataFolder);
 
-            var questionsPath = Path.Combine(dataFolder, "Questions-NEW.bin");
+            var questionsFileName = "Questions-NEW.bin";
+            var questionsPath = Path.Combine(dataFolder, questionsFileName);
             if (File.Exists(questionsPath) == false)
             {
                 if (Directory.Exists(dataFolder) == false)
                     Directory.CreateDirectory(dataFolder);
 
-                Trace.WriteLine("StorageConnectionString: " + CloudConfigurationManager.GetSetting("StorageConnectionString"));
-                CloudStorageAccount storageAccount = CloudStorageAccount.Parse(
-                    CloudConfigurationManager.GetSetting("StorageConnectionString"));
-                CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
-                CloudBlobContainer container = blobClient.GetContainerReference("data");
-                ListBlobsInContainer(container);
-
-                foreach (IListBlobItem item in container.ListBlobs(null, false))
-                {
-                    //if (item.GetType() == typeof(CloudBlockBlob) && item.Uri.ToString().EndsWith(".zip"))
-                    if (item.GetType() == typeof(CloudBlockBlob))
-                    {
-                        CloudBlockBlob blob = (CloudBlockBlob)item;
-                        //Trace.WriteLine(string.Format("Found blob {0}", blob.Name));
-
-                        //if (blob.Name != "intermediate-AnswerCount.zip")
-                        //if (blob.Name != "Questions-NEW.zip")
-                        if (blob.Name != "Questions-NEW.bin")
-                            continue;
-                        Trace.WriteLine(string.Format("Found blob {0}", blob.Name));
-
-                        var blobOutput = Path.Combine(dataFolder, blob.Name);
-                        DownloadBlob(blob, blobOutput);
-
-                        //var decompressedFile = Path.Combine(dataFolder, Path.GetFileNameWithoutExtension(blobOutput) + ".bin");
-                        //if (File.Exists(decompressedFile))
-                        //    File.Delete(decompressedFile);
-                        //var decompressTimer = Stopwatch.StartNew();
-                        //ZipFile.ExtractToDirectory(blobOutput, dataFolder);
-                        //decompressTimer.Stop();
-                        //Trace.WriteLine(string.Format("Took {0} to decompress to {1} ({2})", 
-                        //                decompressTimer.Elapsed, Path.GetFileName(blobOutput), Path.GetFileName(decompressedFile)));
-                        //var info = new FileInfo(decompressedFile);
-                        //Trace.WriteLine(string.Format("Decompressed file {0}, {1:N0} bytes", Path.GetFileName(decompressedFile), new FileInfo(decompressedFile).Length));
-                    }
-                }
+                DownloadDataFiles(dataFolder);
             }
 
             Trace.WriteLine("Data folder: " + dataFolder);
             ListFolderInfo(dataFolder);
             Trace.WriteLine("Finished listing contents of Data folder: " + dataFolder);
 
-            return StackOverflowTagServer.TagServer.CreateFromFile(questionsPath);
+            //return StackOverflowTagServer.TagServer.CreateFromFile(questionsPath);
+            var questions = StackOverflowTagServer.TagServer.GetRawQuestionsFromDisk(dataFolder, questionsFileName);
+            return StackOverflowTagServer.TagServer.CreateFromSerialisedData(questions, dataFolder);
+        }
+
+        private static void DownloadDataFiles(string dataFolder)
+        {
+            Trace.WriteLine("StorageConnectionString: " + CloudConfigurationManager.GetSetting("StorageConnectionString"));
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(
+                CloudConfigurationManager.GetSetting("StorageConnectionString"));
+            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+            CloudBlobContainer container = blobClient.GetContainerReference("data");
+            ListBlobsInContainer(container);
+
+            foreach (IListBlobItem item in container.ListBlobs(null, false))
+            {
+                //if (item.GetType() == typeof(CloudBlockBlob) && item.Uri.ToString().EndsWith(".zip"))
+                if (item.GetType() == typeof(CloudBlockBlob))
+                {
+                    CloudBlockBlob blob = (CloudBlockBlob)item;
+                    //Trace.WriteLine(string.Format("Found blob {0}", blob.Name));
+
+                    //if (blob.Name != "intermediate-AnswerCount.zip")
+                    //if (blob.Name != "Questions-NEW.zip")
+                    if (blob.Name != "Questions-NEW.bin")
+                        continue;
+                    Trace.WriteLine(string.Format("Found blob {0}", blob.Name));
+
+                    var blobOutput = Path.Combine(dataFolder, blob.Name);
+                    DownloadBlob(blob, blobOutput);
+
+                    //var decompressedFile = Path.Combine(dataFolder, Path.GetFileNameWithoutExtension(blobOutput) + ".bin");
+                    //if (File.Exists(decompressedFile))
+                    //    File.Delete(decompressedFile);
+                    //var decompressTimer = Stopwatch.StartNew();
+                    //ZipFile.ExtractToDirectory(blobOutput, dataFolder);
+                    //decompressTimer.Stop();
+                    //Trace.WriteLine(string.Format("Took {0} to decompress to {1} ({2})",
+                    //                decompressTimer.Elapsed, Path.GetFileName(blobOutput), Path.GetFileName(decompressedFile)));
+                    //var info = new FileInfo(decompressedFile);
+                    //Trace.WriteLine(string.Format("Decompressed file {0}, {1:N0} bytes", Path.GetFileName(decompressedFile), new FileInfo(decompressedFile).Length));
+                }
+            }
         }
 
         private static void DownloadBlob(CloudBlockBlob blob, string outputPath, bool deleteIfAlreadyExists = false)
@@ -112,7 +120,7 @@ namespace Server
                 Trace.WriteLine(string.Format("Took {0} to download {1:N0} bytes", timer.Elapsed, blob.Properties.Length));
                 Trace.WriteLine(string.Format("File {0}, Info (on disk) {1:N0} bytes", Path.GetFileName(outputPath), new FileInfo(outputPath).Length));
             }
-        }       
+        }
 
         private static void ListFolderInfo(string folderName)
         {

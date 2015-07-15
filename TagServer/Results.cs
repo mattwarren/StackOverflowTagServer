@@ -31,6 +31,8 @@ namespace StackOverflowTagServer
 
         internal static void AddData(string data)
         {
+            if (stream == null) return;
+
             stream.Write(data.EndsWith(",") ? data : data + ",");
         }
 

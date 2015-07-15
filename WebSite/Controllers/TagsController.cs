@@ -8,7 +8,7 @@ using Server.Infrastructure;
 using System.Diagnostics;
 using System.Globalization;
 using StackOverflowTagServer.DataStructures;
-using Microsoft.ApplicationInsights; 
+using Microsoft.ApplicationInsights;
 
 namespace Server.Controllers
 {
@@ -64,7 +64,7 @@ namespace Server.Controllers
         }
 
         // GET: api/Tags/5
-        //public object Get(string tag, 
+        //public object Get(string tag,
         //                  QueryType type = QueryType.ViewCount,
         //                  int pageSize = 50,
         //                  int skip = 0)
@@ -112,9 +112,10 @@ namespace Server.Controllers
             var pageSize = QueryStringOrDefaultInt(queryStringPairs, "pageSize", 50);
             var skip = QueryStringOrDefaultInt(queryStringPairs, "skip", 0);
             var otherTag = QueryStringOrDefaultString(queryStringPairs, "otherTag", "");
+            var @operator = QueryStringOrDefaultString(queryStringPairs, "operator", "NOT");
 
             var timer = Stopwatch.StartNew();
-            var results = WebApiApplication.TagServer.Value.ComparisonQuery(type, tag, otherTag, "NOT", pageSize, skip);
+            var results = WebApiApplication.TagServer.Value.ComparisonQuery(type, tag, otherTag, @operator, pageSize, skip);
             timer.Stop();
 
             return new

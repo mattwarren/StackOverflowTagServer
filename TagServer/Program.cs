@@ -27,8 +27,11 @@ namespace StackOverflowTagServer
             var filename = @"Questions-NEW.bin";
             //var filename = @"Questions-subset.bin";
 
+            //TagServer.TestBitSets(folder);
+            //return;
+
             var startupTimer = Stopwatch.StartNew();
-            var rawQuestions = GetRawQuestionsFromDisk(folder, filename);
+            var rawQuestions = TagServer.GetRawQuestionsFromDisk(folder, filename);
 
             //TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
             TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
@@ -40,7 +43,7 @@ namespace StackOverflowTagServer
 
             GC.Collect(2, GCCollectionMode.Forced);
             var totalMemory = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Console.WriteLine("Took {0} ({1:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL", 
+            Console.WriteLine("Took {0} ({1:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL",
                               startupTimer.Elapsed, startupTimer.Elapsed.TotalMilliseconds, totalMemory, totalMemory / 1024.0);
 
             return;
@@ -64,29 +67,10 @@ namespace StackOverflowTagServer
 
             Console.WriteLine("Finished, press <ENTER> to exit");
             Console.ReadLine();
-        }     
-
-        private static List<Question> GetRawQuestionsFromDisk(string folder, string filename)
-        {
-            List<Question> rawQuestions;
-            var fileReadTimer = Stopwatch.StartNew();
-            Console.WriteLine("DE-serialising the Stack Overflow Questions from the disk....");
-            using (var file = File.OpenRead(Path.Combine(folder, filename)))
-            {
-                rawQuestions = Serializer.Deserialize<List<Question>>(file);
-            }
-            fileReadTimer.Stop();
-
-            GC.Collect(2, GCCollectionMode.Forced);
-            var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Console.WriteLine("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from disk - Using {2:N2} MB ({3:N2} GB) of memory\n",
-                                fileReadTimer.Elapsed, rawQuestions.Count, memoryUsed, memoryUsed / 1024.0);
-
-            return rawQuestions;
         }
 
         private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, HashSet leppieExpandedTags)
-        {                       
+        {
             Console.WriteLine("\nThere are {0:N0} questions and {1:N0} tags in total", rawQuestions.Count, allTags.Count);
             Console.WriteLine("Leppie {0:N0} tags with wildcards expand to {1:N0} tags in total", leppieTags.Count, leppieExpandedTags.Count);
             var remainingTagsHashSet = new CLR.HashSet<string>(allTags.Keys);
@@ -98,7 +82,7 @@ namespace StackOverflowTagServer
             Console.WriteLine("Sanity checking excluded/included tags and questions...");
             var excludedQuestionCounter = rawQuestions.Count(question => question.Tags.Any(t => leppieExpandedTags.Contains(t)));
             var includedQuestionCounter = rawQuestions.Count(question => question.Tags.All(t => remainingTagsHashSet.Contains(t)));
-            Console.WriteLine("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})", 
+            Console.WriteLine("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})",
                               leppieExpandedTags.Count, excludedQuestionCounter, rawQuestions.Count);
             Console.WriteLine(
                 "{0:N0} remaining tags cover {1:N0} questions, {2:N0} + {3:N0} = {4:N0} (Expected: {5:N0})",
@@ -359,7 +343,7 @@ namespace StackOverflowTagServer
             var highestScore = rawQuestions.OrderByDescending(q => q.Score).First();
             Console.WriteLine("Max ViewCount {0}, Question Id {1}", mostViewed.ViewCount, mostViewed.Id);
             Console.WriteLine("Max Answers {0}, Question Id {1}", mostAnswers.AnswerCount, mostAnswers.Id);
-            Console.WriteLine("Max Score {0}, Question Id {1}\n", highestScore.Score, highestScore.Id);            
+            Console.WriteLine("Max Score {0}, Question Id {1}\n", highestScore.Score, highestScore.Id);
         }
 
         private static void PrintTagStats(TagLookup allTags)
@@ -404,28 +388,20 @@ namespace StackOverflowTagServer
                 }
             }
 
-            var tagCountCutoff = 25000; // 50000;
-            var topTags = allTags.Where(t => t.Value > tagCountCutoff && 
-                                             t.Key != TagServer.ALL_TAGS_KEY)
-                                 .Select(t => "\"" + t.Key + "\"")
-                                 .ToList();
-            Console.WriteLine("Tags with MORE than {0:N0} questions ({1} in total): ", tagCountCutoff, topTags.Count);
-            Console.WriteLine("{{ {0} }}", String.Join(", ", topTags));
+            var totalSoFar = 0;
+            var totalsPerBucket = new Dictionary<int, long>();
+            foreach (var bucket in histogram.OrderBy(h => h.Key))
+            {
+                totalSoFar += bucket.Value.Count;
+                totalsPerBucket.Add(bucket.Key, totalSoFar);
+            }
 
             Console.WriteLine();
             foreach (var bucket in histogram.OrderByDescending(h => h.Key))
             {
-                Console.WriteLine("{0,8:N0}: {1:N0}", bucket.Key, bucket.Value.Count);
+                Console.WriteLine("{0,8:N0}: {1} {2}",
+                    bucket.Key, bucket.Value.Count.ToString("N0").PadRight(8), totalsPerBucket[bucket.Key].ToString("N0").PadRight(8));
             }
-
-            //Console.WriteLine();
-            //foreach (var bucket in histogram.OrderByDescending(h => h.Key))
-            //{
-            //    if (bucket.Key > 10000)
-            //        Console.WriteLine("{0,8:N0}: {1:N0} -> {2}\n", 
-            //            bucket.Key, bucket.Value.Count, 
-            //            String.Join(", ", bucket.Value.Select(b => string.Format("[{0:N0}, {1:N0}]", b.Key, b.Value))));
-            //}
         }
 
 #region HelperMethods
@@ -449,7 +425,7 @@ namespace StackOverflowTagServer
             //foreach (var item in Enumerable.Range(0, Math.Min(listA.Count, listB.Count)))
             //{
             //    if (listA[item].Id != listB[item].Id)
-            //        Console.WriteLine("ERROR: lists differ at position[{0}], {1} Id: {2}, {3} Id: {4}", 
+            //        Console.WriteLine("ERROR: lists differ at position[{0}], {1} Id: {2}, {3} Id: {4}",
             //                          item, nameA, listA[item].Id, nameB, listB[item].Id);
             //}
         }
