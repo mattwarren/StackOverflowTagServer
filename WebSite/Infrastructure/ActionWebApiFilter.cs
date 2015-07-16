@@ -23,7 +23,12 @@ namespace Server.Infrastructure
 
         public async override void OnActionExecuted(HttpActionExecutedContext actionExecutedContext)
         {
-            var fileName = "Response-" + Guid.NewGuid() + ".json";
+            var now = DateTime.Now.ToString("yyyy_MM_dd@HH_mm_ss");
+            var fileName = "";
+            if (Timer.IsValueCreated)
+                fileName = String.Format("Response-{0}ms-{1}-{2}.json", Timer.Value.ElapsedMilliseconds, now, Guid.NewGuid());
+            else
+                fileName = String.Format("Response-{0}-{1}.json", now, Guid.NewGuid());
             var dataFolder = HttpContext.Current.Server.MapPath("~/Data");
             var responseFolder = Path.Combine(dataFolder, "Responses");
             if (Directory.Exists(responseFolder) == false)
@@ -36,7 +41,6 @@ namespace Server.Infrastructure
                                 (int)actionExecutedContext.Response.StatusCode,
                                 actionExecutedContext.Response.StatusCode));
                 Trace.WriteLine(String.Format("    Took {0} ({1:N2} msecs)", Timer.Value.Elapsed, Timer.Value.Elapsed.TotalMilliseconds));
-                fileName = String.Format("Response-{0}ms-{1}.json", Timer.Value.ElapsedMilliseconds, Guid.NewGuid());
                 if (actionExecutedContext == null)
                 {
                     Trace.WriteLine("\"actionExecutedContext\" is null, unable to get the response");
