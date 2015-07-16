@@ -13,9 +13,9 @@ using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
 using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
+// ReSharper disable LocalizableElement
 namespace StackOverflowTagServer
 {
-// ReSharper disable LocalizableElement
     public static class WildcardProcessor
     {
         /// <summary> 1 </summary>
@@ -30,10 +30,10 @@ namespace StackOverflowTagServer
         internal static Trie<int> CreateTrie(TagLookup allTags)
         {
             // From http://algs4.cs.princeton.edu/52trie/
-            // 15. Substring matches. 
-            //     Given a list of (short) strings, your goal is to support queries where the user looks up a string s 
-            //     and your job is to report back all strings in the list that contain s. 
-            //     Hint: if you only want prefix matches (where the strings have to start with s), use a TST as described in the text. 
+            // 15. Substring matches.
+            //     Given a list of (short) strings, your goal is to support queries where the user looks up a string s
+            //     and your job is to report back all strings in the list that contain s.
+            //     Hint: if you only want prefix matches (where the strings have to start with s), use a TST as described in the text.
             //     To support substring matches, insert the suffixes of each word (e.g., string, tring, ring, ing, ng, g) into the TST.
             var trieSetupTimer = Stopwatch.StartNew();
             var trie = new Trie<int>();
@@ -48,7 +48,7 @@ namespace StackOverflowTagServer
 
         public static NGrams CreateNGrams(TagLookup allTags, int N)
         {
-            // From https://swtch.com/~rsc/regexp/regexp4.html, 
+            // From https://swtch.com/~rsc/regexp/regexp4.html,
             // Continuing the example from the last section, the document set:
             // (1) Google Code Search
             // (2) Google Code Project Hosting
@@ -135,7 +135,7 @@ namespace StackOverflowTagServer
                     {
                         if (Operators.LikeString(tag, tagToExpand, CompareMethod.Text))
                         {
-                            //If you use CompareMethod.Text it will compare case-insensitive. 
+                            //If you use CompareMethod.Text it will compare case-insensitive.
                             //For case-sensitive comparison, you can use CompareMethod.Binary.
                             expandedTags.Add(tag);
                         }
@@ -165,7 +165,7 @@ namespace StackOverflowTagServer
                     var regex = new Regex(regexPattern, RegexOptions.Compiled);
                     foreach (var tag in allTags.Keys)
                     {
-                        if (!regex.IsMatch(tag)) 
+                        if (!regex.IsMatch(tag))
                             continue;
                         expandedTags.Add(tag);
                     }
@@ -178,13 +178,13 @@ namespace StackOverflowTagServer
 
             return expandedTags;
         }
-        
+
         internal static HashSet ExpandTagsTrie(TagLookup allTags, List<string> tagsToExpand, Trie<int> trie, bool useNewMode = true)
         {
             // It *seems* like SO only allows prefix, suffix or both, i.e. "java*", "*-vba", "*java*"
             // But not anything else like "ja*a", or "j?va?", etc
             var expandedTags = new HashSet();
-            var bruteForceTimer = new Stopwatch(); 
+            var bruteForceTimer = new Stopwatch();
             foreach (var tagToExpand in tagsToExpand)
             {
                 if (IsWildCard(tagToExpand) == false)
@@ -216,7 +216,7 @@ namespace StackOverflowTagServer
                         DoStartsWithOrEndsWithSearch(trie, tagToExpand, expandedTags);
                     }
 
-                    // With a trie, brute-search is the only way to deal with *php*, i.e. matching in the middle of this string, 
+                    // With a trie, brute-search is the only way to deal with *php*, i.e. matching in the middle of this string,
                     // If we don't do this, we miss items that are in the middle i.e. *php* won't match "cakephp-1.0"
                     bruteForceTimer.Start();
                     foreach (var tag in allTags)
@@ -243,7 +243,7 @@ namespace StackOverflowTagServer
 
         public static HashSet ExpandTagsNGrams(TagLookup allTags, List<string> tagsToExpand, NGrams nGrams)
         {
-            // Query: /Google.*Search/, we can build a query of ANDs and ORs that gives the trigrams that must be present in any text matching the regular expression. 
+            // Query: /Google.*Search/, we can build a query of ANDs and ORs that gives the trigrams that must be present in any text matching the regular expression.
             // In this case, the query is
             //      Goo AND oog AND ogl AND gle AND Sea AND ear AND arc AND rch
             // '*php* -> php
@@ -261,12 +261,12 @@ namespace StackOverflowTagServer
                     //not a wildcard, leave it as is
                     if (allTags.ContainsKey(tagPattern))
                         expandedTags.Add(tagPattern);
-                    continue; 
+                    continue;
                 }
 
                 var createSearchTimer = Stopwatch.StartNew();
                 var searches = new List<string>();
-                var actualTag = String.Empty;                
+                var actualTag = String.Empty;
                 var firstChar = tagPattern[0];
                 var lastChar = tagPattern[tagPattern.Length - 1];
                 if (firstChar == '*' && lastChar == '*')
@@ -320,11 +320,11 @@ namespace StackOverflowTagServer
             var tagsAdded = 0;
             var rawTagPattern = tagPattern.Replace("*", "");
             foreach (var tagMatch in expandedTagIds.Select(expandedTagId => allTagsList[expandedTagId]))
-            {                
+            {
                 if (IsActualMatch(tagMatch, tagPattern, rawTagPattern))
                 {
                     expandedTags.Add(tagMatch);
-                    tagsAdded++;                    
+                    tagsAdded++;
                 }
                 //else
                 //{
@@ -340,11 +340,11 @@ namespace StackOverflowTagServer
 
             return tagsAdded > 0;
         }
-        
+
         // Heavily-modified version of the code from http://jakemdrew.com/blog/ngram.htm
         private static IEnumerable<string> CreateNGramsForIndexing(string text, int N)
         {
-            if (N == 0) 
+            if (N == 0)
                 throw new Exception("n-gram size must be > 0");
 
             var nGram = new StringBuilder();
@@ -372,9 +372,9 @@ namespace StackOverflowTagServer
             if (N == 0)
                 throw new Exception("n-gram size must be > 0");
 
-            var nGram = new StringBuilder();            
+            var nGram = new StringBuilder();
             int currentWordLength = 0;
-            for (int i = 0; i < text.Length - 1; i++)            
+            for (int i = 0; i < text.Length - 1; i++)
             {
                 nGram.Append(text[i]);
                 currentWordLength++;
@@ -387,7 +387,7 @@ namespace StackOverflowTagServer
                 }
             }
 
-            nGram.Append(text.Last());            
+            nGram.Append(text.Last());
             yield return nGram.ToString();
         }
 
@@ -487,11 +487,11 @@ namespace StackOverflowTagServer
 
             return false;
         }
-        
+
         private static bool IsWildCard(string tag)
         {
             return tag.Contains("*");
         }
     }
-// ReSharper restore LocalizableElement
 }
+// ReSharper restore LocalizableElement

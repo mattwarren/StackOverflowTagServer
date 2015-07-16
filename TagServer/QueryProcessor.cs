@@ -18,7 +18,7 @@ namespace StackOverflowTagServer
         private readonly List<Question> questions;
         private readonly Func<QueryType, TagByQueryLookup> GetQueryTypeInfo;
 
-        private readonly Lazy<HashSet> HashSetCache = new Lazy<HashSet>(() => 
+        private readonly Lazy<HashSet> HashSetCache = new Lazy<HashSet>(() =>
             {
                 var hashSet = new HashSet(new IntComparer());
                 var initialiseMethod = typeof(HashSet).GetMethod("Initialize", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -54,14 +54,15 @@ namespace StackOverflowTagServer
                 Console.WriteLine("Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms)",
                                     type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
+            var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(", ", r.Tags)));
             Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
             Console.WriteLine("\n");
 
             return result;
         }
 
-        internal List<Question> ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip)
+        internal List<Question> ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, 
+                                                int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
         {
             var timer = Stopwatch.StartNew();
             TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
@@ -76,22 +77,39 @@ namespace StackOverflowTagServer
                 //Use Intersect for AND, Union for OR and Except for NOT
                 case "AND":
                     baseQuery = baseQuery.Intersect(queryInfo[tag2]);
+                    if (tagsToExclude != null)
+                        baseQuery = baseQuery.Except(tagsToExclude.Select(tag => queryInfo[tag]).SelectMany(id => id));
+                    break;
+                case "AND-NOT":
+                    // TODO Complete this!!
                     break;
                 case "OR":
-                    //Union on it's own isn't correcti, it uses seq1.Concat(seq2).Distinct(),
+                    // NOTE: Union on it's own isn't correct, it uses seq1.Concat(seq2).Distinct(),
                     // so it pulls ALL items from seq1, before pulling ANY items from seq2
+                    // TODO this has a small bug, we can get items out of order as we pull them thru in pairs
+                    // if t2 has several items that are larger than t1, t1 will still come out first!!
+                    // So algorithm needs to be:
+                    //  1) pull the LARGEST value (from t1 or t2)
+                    //  2) process this item
+                    //  3) repeat 1) again
                     baseQuery = baseQuery.Zip(queryInfo[tag2], (t1, t2) => new[] { t1, t2 })
                                          .SelectMany(item => item)
                                          .Distinct();
-                    break;
-                case "NOT":
-                    baseQuery = baseQuery.Except(queryInfo[tag2]);
+                    if (tagsToExclude != null)
+                        baseQuery = baseQuery.Except(tagsToExclude.Select(tag => queryInfo[tag]).SelectMany(id => id));
                     break;
                 case "OR-NOT": //"i.e. .net+or+jquery-"
                     baseQuery = baseQuery.Zip(queryInfo[TagServer.ALL_TAGS_KEY], (t1, t2) => new[] { t1, t2 })
                                          .SelectMany(item => item)
                                          .Except(queryInfo[tag2])
                                          .Distinct();
+                    if (tagsToExclude != null)
+                        baseQuery = baseQuery.Except(tagsToExclude.Select(tag => queryInfo[tag]).SelectMany(id => id));
+                    break;
+                case "NOT":
+                    baseQuery = baseQuery.Except(queryInfo[tag2]);
+                    if (tagsToExclude != null)
+                        baseQuery = baseQuery.Except(tagsToExclude.Select(tag => queryInfo[tag]).SelectMany(id => id));
                     break;
                 default:
                     throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
@@ -122,7 +140,8 @@ namespace StackOverflowTagServer
             return result;
         }
 
-        internal List<Question> ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip)
+        internal List<Question> ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, 
+                                                      int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
         {
             var timer = Stopwatch.StartNew();
             TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
@@ -160,9 +179,9 @@ namespace StackOverflowTagServer
                     var alreadySeen = GetCachedHashSet();
                     using (IEnumerator<int> e1 = queryInfo[tag1].AsEnumerable().GetEnumerator())
                     using (IEnumerator<int> e2 = queryInfo[tag2].AsEnumerable().GetEnumerator())
-                    { 
+                    {
                         while (e1.MoveNext() && e2.MoveNext())
-                        { 
+                        {
                             if (result.Count >= pageSize)
                                 break;
 
@@ -266,7 +285,7 @@ namespace StackOverflowTagServer
             //Console.WriteLine("\n");
 
             return result;
-        }     
+        }
 
         internal List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize, int skip)
         {
@@ -460,8 +479,8 @@ namespace StackOverflowTagServer
             }
             var baseQuery = queryInfo[tag];
 #if DEBUG
-            var result = 
-                baseQuery.Where(b => 
+            var result =
+                baseQuery.Where(b =>
                     {
                         var possiblyExists = bloomFilter.PossiblyExists(b);
                         if (possiblyExists == false)
@@ -492,7 +511,7 @@ namespace StackOverflowTagServer
                 Console.WriteLine("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - BLOOM",
                                         type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            //Console.WriteLine("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes), Truthiness {2:N2}", 
+            //Console.WriteLine("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes), Truthiness {2:N2}",
             //                  result.Count(), bloomFilter.NumberOfItems, bloomFilter.Truthiness);
             Console.WriteLine("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes)", result.Count(), bloomFilter.NumberOfItems);
             Console.WriteLine(gcInfo.ToString());
@@ -564,13 +583,13 @@ namespace StackOverflowTagServer
                     fieldSelector = qu => qu.CreationDate.ToString();
                     break;
                 case QueryType.Score:
-                    fieldSelector = qu => qu.Score.HasValue ? qu.Score.ToString() : "<null>";
+                    fieldSelector = qu => qu.Score.HasValue ? qu.Score.Value.ToString("N0") : "<null>";
                     break;
                 case QueryType.ViewCount:
-                    fieldSelector = qu => qu.ViewCount.HasValue ? qu.ViewCount.ToString() : "<null>";
+                    fieldSelector = qu => qu.ViewCount.HasValue ? qu.ViewCount.Value.ToString("N0") : "<null>";
                     break;
                 case QueryType.AnswerCount:
-                    fieldSelector = qu => qu.AnswerCount.HasValue ? qu.AnswerCount.ToString() : "<null>";
+                    fieldSelector = qu => qu.AnswerCount.HasValue ? qu.AnswerCount.Value.ToString("N0") : "<null>";
                     break;
                 default:
                     throw new InvalidOperationException(string.Format("Invalid query type {0}", (int)type));

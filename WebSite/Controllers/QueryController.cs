@@ -25,17 +25,22 @@ namespace Server.Controllers
             var useLinq = QueryStringProcessor.GetBool(queryStringPairs, "useLinq", false);
             var useLeppieExclusions = QueryStringProcessor.GetBool(queryStringPairs, "leppieExclusions", false);
 
-            var allTags = WebApiApplication.TagServer.Value.AllTags;
-            var leppieTags = WebApiApplication.LeppieTags.Value;
-            var nGrams = WebApiApplication.NGrams.Value;
-            var tagExpansionTimer = Stopwatch.StartNew();
-            var leppieExpandedTags = WildcardProcessor.ExpandTagsNGrams(allTags, leppieTags, nGrams);
-            tagExpansionTimer.Stop();
+            var leppieWildcards = WebApiApplication.LeppieWildcards.Value;
+            StackOverflowTagServer.CLR.HashSet<string> leppieExpandedTags = null;
+            var tagExpansionTimer = new Stopwatch();
+            if (useLeppieExclusions)
+            {
+                var allTags = WebApiApplication.TagServer.Value.AllTags;
+                var nGrams = WebApiApplication.NGrams.Value;
+                tagExpansionTimer = Stopwatch.StartNew();
+                leppieExpandedTags = WildcardProcessor.ExpandTagsNGrams(allTags, leppieWildcards, nGrams);
+                tagExpansionTimer.Stop();
+            }
 
             List<Shared.Question> results;
             var timer = Stopwatch.StartNew();
             if (useLinq)
-                results = WebApiApplication.TagServer.Value.ComparisonQuery(type, tag, otherTag, @operator, pageSize, skip);
+                results = WebApiApplication.TagServer.Value.ComparisonQuery(type, tag, otherTag, @operator, pageSize, skip, tagsToExclude: leppieExpandedTags);
             else
                 results = WebApiApplication.TagServer.Value.ComparisonQueryNoLINQ(type, tag, otherTag, @operator, pageSize, skip);
             timer.Stop();
@@ -60,12 +65,43 @@ namespace Server.Controllers
                     QueryString = HttpContext.Current.Request.QueryString
                                             .ToPairs()
                                             .ToDictionary(p => p.Key, p => p.Value),
-                    TagsBeforeExpansion = leppieTags.Count,
-                    TagsAfterExpansion = leppieExpandedTags.Count,
+                    TagsBeforeExpansion = leppieWildcards.Count,
+                    TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
                     TagsExpansionElapsed = tagExpansionTimer.Elapsed,
                     TagsExpansionMilliseconds = tagExpansionTimer.Elapsed.TotalMilliseconds.ToString("N2"),
                 },
                 Results = results,
+            };
+        }
+
+        [Route("api/Query/LeppieWildcards")]
+        [HttpGet]
+        public object LeppieWildcards()
+        {
+            var justWildcards = WebApiApplication.LeppieWildcards.Value
+                                    .Where(w => w.Contains("*"))
+                                    .OrderBy(t => t)
+                                    .ToList();
+            return new
+            {
+                Count = WebApiApplication.LeppieWildcards.Value.Count,
+                JustWildcardsCount = justWildcards.Count,
+                JustWildcards = justWildcards,
+                All = WebApiApplication.LeppieWildcards.Value.OrderBy(t => t)
+            };
+        }
+
+        [Route("api/Query/LeppieTags")]
+        [HttpGet]
+        public object LeppieTags()
+        {
+            var allTags = WebApiApplication.TagServer.Value.AllTags;
+            var leppieWildcards = WebApiApplication.LeppieWildcards.Value;
+            var nGrams = WebApiApplication.NGrams.Value;
+            return new
+            {
+                Count = leppieWildcards.Count,
+                All = WildcardProcessor.ExpandTagsNGrams(allTags, leppieWildcards, nGrams).OrderBy(t => t)
             };
         }
     }

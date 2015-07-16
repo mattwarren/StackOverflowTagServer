@@ -24,7 +24,7 @@ namespace Server
                 return CreateTagServer();
             }, LazyThreadSafetyMode.ExecutionAndPublication);
 
-        internal static Lazy<List<string>> LeppieTags =
+        internal static Lazy<List<string>> LeppieWildcards =
             new Lazy<List<string>>(() => Utils.GetLeppieTagsFromResource(), LazyThreadSafetyMode.ExecutionAndPublication);
 
         internal static Lazy<NGrams> NGrams = new Lazy<NGrams>(() =>
