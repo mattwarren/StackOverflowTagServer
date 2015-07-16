@@ -1,12 +1,9 @@
-﻿using ProtoBuf;
-using Shared;
+﻿using Shared;
 using StackOverflowTagServer.DataStructures;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime;
 
 using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
@@ -14,9 +11,9 @@ using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
 
+// ReSharper disable LocalizableElement
 namespace StackOverflowTagServer
 {
-// ReSharper disable LocalizableElement
     class Program
     {
         static void Main(string[] args)
@@ -55,7 +52,7 @@ namespace StackOverflowTagServer
             NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags, N: 3);
 
             // <.net> and <c#> aren't in this lists, so they can be valid tags!
-            var leppieTags = GetLeppieTagsFromResource();
+            var leppieTags = Utils.GetLeppieTagsFromResource();
             var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
 
             // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
@@ -90,21 +87,6 @@ namespace StackOverflowTagServer
                 includedQuestionCounter, excludedQuestionCounter,
                 includedQuestionCounter + excludedQuestionCounter, rawQuestions.Count);
             Console.WriteLine();
-        }
-
-        private static List<string> GetLeppieTagsFromResource()
-        {
-            var leppieTags = new List<string>();
-            var resourceStream = GetStream("leppie - excluded tags.txt");
-            if (resourceStream != null)
-            {
-                var fileStream = new StreamReader(resourceStream);
-                string line;
-                while ((line = fileStream.ReadLine()) != null)
-                    leppieTags.Add(line);
-                //Console.WriteLine(string.Join(", ", tagsToExpand));
-            }
-            return leppieTags;
         }
 
         private static HashSet ProcessTagsForFastLookup(TagLookup allTags, Trie<int> trie, NGrams nGrams, List<string> tagsToExpand)
@@ -447,30 +429,7 @@ namespace StackOverflowTagServer
                 return result;
             }
         }
-
-        // From http://stackoverflow.com/questions/11590582/read-text-file-resource-from-net-library/11596483#11596483
-        private static Stream GetStream(string resourceName)
-        {
-            try
-            {
-                Assembly assy = Assembly.GetExecutingAssembly();
-                string[] resources = assy.GetManifestResourceNames();
-                for (int i = 0; i < resources.Length; i++)
-                {
-                    if (resources[i].ToLower().IndexOf(resourceName.ToLower()) != -1)
-                    {
-                        // resource found
-                        return assy.GetManifestResourceStream(resources[i]);
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                throw;
-            }
-            return Stream.Null;
-        }
 #endregion #region HelperMethods
     }
-    // ReSharper restore LocalizableElement
 }
+// ReSharper restore LocalizableElement

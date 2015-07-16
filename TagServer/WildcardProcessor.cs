@@ -16,7 +16,7 @@ using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 namespace StackOverflowTagServer
 {
 // ReSharper disable LocalizableElement
-    static class WildcardProcessor
+    public static class WildcardProcessor
     {
         /// <summary> 1 </summary>
         private static readonly int TrieTerminator = 1;
@@ -46,7 +46,7 @@ namespace StackOverflowTagServer
             return trie;
         }
 
-        internal static NGrams CreateNGrams(TagLookup allTags, int N)
+        public static NGrams CreateNGrams(TagLookup allTags, int N)
         {
             // From https://swtch.com/~rsc/regexp/regexp4.html, 
             // Continuing the example from the last section, the document set:
@@ -241,7 +241,7 @@ namespace StackOverflowTagServer
             return expandedTags;
         }
 
-        internal static HashSet ExpandTagsNGrams(TagLookup allTags, List<string> tagsToExpand, NGrams nGrams)
+        public static HashSet ExpandTagsNGrams(TagLookup allTags, List<string> tagsToExpand, NGrams nGrams)
         {
             // Query: /Google.*Search/, we can build a query of ANDs and ORs that gives the trigrams that must be present in any text matching the regular expression. 
             // In this case, the query is

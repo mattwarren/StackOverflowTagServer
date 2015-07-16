@@ -3,6 +3,7 @@ using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using StackOverflowTagServer;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -12,17 +13,26 @@ using System.Web.Mvc;
 using System.Web.Optimization;
 using System.Web.Routing;
 
+using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
+
 namespace Server
 {
-    public class WebApiApplication : System.Web.HttpApplication
+    public class WebApiApplication : HttpApplication
     {
         internal static Lazy<TagServer> TagServer = new Lazy<TagServer>(() =>
             {
                 return CreateTagServer();
             }, LazyThreadSafetyMode.ExecutionAndPublication);
 
+        internal static Lazy<List<string>> LeppieTags =
+            new Lazy<List<string>>(() => Utils.GetLeppieTagsFromResource(), LazyThreadSafetyMode.ExecutionAndPublication);
+
+        internal static Lazy<NGrams> NGrams = new Lazy<NGrams>(() =>
+            WildcardProcessor.CreateNGrams(TagServer.Value.AllTags, N: 3), LazyThreadSafetyMode.ExecutionAndPublication);
+
         protected void Application_Start()
         {
+            Trace.Write("Application_Start()");
             AreaRegistration.RegisterAllAreas();
             GlobalConfiguration.Configure(WebApiConfig.Register);
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
@@ -32,11 +42,12 @@ namespace Server
             // For initialisation to happen here, rather than waiting for the first request
             try
             {
+                Trace.Write("Starting TagServer");
                 var temp = WebApiApplication.TagServer.Value;
             }
             catch (Exception ex)
             {
-                Trace.Write(ex);
+                Trace.Write("Exception in Application_Start()\n" + ex);
             }
         }
 
@@ -55,11 +66,11 @@ namespace Server
                     Directory.CreateDirectory(dataFolder);
 
                 DownloadDataFiles(dataFolder);
-            }
 
-            Trace.WriteLine("Data folder: " + dataFolder);
-            ListFolderInfo(dataFolder);
-            Trace.WriteLine("Finished listing contents of Data folder: " + dataFolder);
+                Trace.WriteLine("Data folder: " + dataFolder);
+                ListFolderInfo(dataFolder);
+                Trace.WriteLine("Finished listing contents of Data folder: " + dataFolder);
+            }
 
             //return StackOverflowTagServer.TagServer.CreateFromFile(questionsPath);
             var questions = StackOverflowTagServer.TagServer.GetRawQuestionsFromDisk(dataFolder, questionsFileName);
@@ -77,31 +88,17 @@ namespace Server
 
             foreach (IListBlobItem item in container.ListBlobs(null, false))
             {
-                //if (item.GetType() == typeof(CloudBlockBlob) && item.Uri.ToString().EndsWith(".zip"))
                 if (item.GetType() == typeof(CloudBlockBlob))
                 {
                     CloudBlockBlob blob = (CloudBlockBlob)item;
                     //Trace.WriteLine(string.Format("Found blob {0}", blob.Name));
 
-                    //if (blob.Name != "intermediate-AnswerCount.zip")
-                    //if (blob.Name != "Questions-NEW.zip")
-                    if (blob.Name != "Questions-NEW.bin")
+                    if (blob.Name.EndsWith(".bin") == false)
                         continue;
                     Trace.WriteLine(string.Format("Found blob {0}", blob.Name));
 
                     var blobOutput = Path.Combine(dataFolder, blob.Name);
                     DownloadBlob(blob, blobOutput);
-
-                    //var decompressedFile = Path.Combine(dataFolder, Path.GetFileNameWithoutExtension(blobOutput) + ".bin");
-                    //if (File.Exists(decompressedFile))
-                    //    File.Delete(decompressedFile);
-                    //var decompressTimer = Stopwatch.StartNew();
-                    //ZipFile.ExtractToDirectory(blobOutput, dataFolder);
-                    //decompressTimer.Stop();
-                    //Trace.WriteLine(string.Format("Took {0} to decompress to {1} ({2})",
-                    //                decompressTimer.Elapsed, Path.GetFileName(blobOutput), Path.GetFileName(decompressedFile)));
-                    //var info = new FileInfo(decompressedFile);
-                    //Trace.WriteLine(string.Format("Decompressed file {0}, {1:N0} bytes", Path.GetFileName(decompressedFile), new FileInfo(decompressedFile).Length));
                 }
             }
         }
@@ -126,15 +123,15 @@ namespace Server
         {
             Process p = new Process();
             p.StartInfo.FileName = "cmd.exe";
-            p.StartInfo.Arguments = "/c dir " + folderName;
+            p.StartInfo.Arguments = "/c dir " + folderName + "\\*.bin";
             p.StartInfo.UseShellExecute = false;
             p.StartInfo.RedirectStandardOutput = true;
             p.Start();
 
             p.WaitForExit();
             string output = p.StandardOutput.ReadToEnd();
-            //p.WaitForExit();
-            Trace.WriteLine(output);
+            Trace.WriteLine(string.Format("Dir args: {0}", p.StartInfo.Arguments));
+            Trace.WriteLine("Dir output:\n" + output);
         }
 
         private static void ListBlobsInContainer(CloudBlobContainer container)
