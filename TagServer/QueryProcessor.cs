@@ -154,6 +154,7 @@ namespace StackOverflowTagServer
             var result = new List<Question>(pageSize);
             int baseQueryCounter = 0;
             int itemsSkipped = 0;
+            int excludedCounter = 0;
             switch (@operator)
             {
                 //Use Intersect for AND, Union for OR and Except for NOT
@@ -165,6 +166,14 @@ namespace StackOverflowTagServer
                         if (result.Count >= pageSize)
                             break;
 
+                        baseQueryCounter++;
+
+                        if (tagsToExclude != null && questions[item].Tags.Any(t => tagsToExclude.Contains(t)))
+                        {
+                            excludedCounter++;
+                            continue;
+                        }
+
                         if (andHashSet.Contains(item))
                         {
                             andHashSet.Remove(item);
@@ -173,8 +182,6 @@ namespace StackOverflowTagServer
                             else
                                 itemsSkipped++;
                         }
-
-                        baseQueryCounter++;
                     }
                     break;
                 case "OR":
@@ -188,6 +195,14 @@ namespace StackOverflowTagServer
                             if (result.Count >= pageSize)
                                 break;
 
+                            baseQueryCounter++;
+
+                            if (tagsToExclude != null && questions[e1.Current].Tags.Any(t => tagsToExclude.Contains(t)))
+                            {
+                                excludedCounter++;
+                                continue;
+                            }
+
                             // See if we can use Tag1
                             if (alreadySeen.Add(e1.Current))
                             {
@@ -199,6 +214,14 @@ namespace StackOverflowTagServer
 
                             if (result.Count >= pageSize)
                                 break;
+                            // TODO should we be doing this here as well!!?!?!
+                            //baseQueryCounter++;
+
+                            if (tagsToExclude != null && questions[e2.Current].Tags.Any(t => tagsToExclude.Contains(t)))
+                            {
+                                excludedCounter++;
+                                continue;
+                            }
 
                             // See if we can use Tag2
                             if (alreadySeen.Add(e2.Current))
@@ -208,8 +231,6 @@ namespace StackOverflowTagServer
                                 else
                                     itemsSkipped++;
                             }
-
-                            baseQueryCounter++;
                         }
                     }
                     break;
@@ -221,6 +242,14 @@ namespace StackOverflowTagServer
                         if (result.Count >= pageSize)
                             break;
 
+                        baseQueryCounter++;
+
+                        if (tagsToExclude != null && questions[item].Tags.Any(t => tagsToExclude.Contains(t)))
+                        {
+                            excludedCounter++;
+                            continue;
+                        }
+
                         if (notHashSet.Add(item))
                         {
                             if (itemsSkipped >= skip)
@@ -228,8 +257,6 @@ namespace StackOverflowTagServer
                             else
                                 itemsSkipped++;
                         }
-
-                        baseQueryCounter++;
                     }
                     break;
                 case "OR-NOT": //"i.e. .net+or+jquery-"
@@ -243,6 +270,14 @@ namespace StackOverflowTagServer
                             if (result.Count >= pageSize)
                                 break;
 
+                            baseQueryCounter++;
+
+                            if (tagsToExclude != null && questions[e1.Current].Tags.Any(t => tagsToExclude.Contains(t)))
+                            {
+                                excludedCounter++;
+                                continue;
+                            }
+
                             if (orNotHashSet.Contains(e1.Current) == false && seenBefore.Add(e1.Current))
                             {
                                 if (itemsSkipped >= skip)
@@ -253,6 +288,14 @@ namespace StackOverflowTagServer
 
                             if (result.Count >= pageSize)
                                 break;
+                            // TODO should we be doing this here as well!!?!?!
+                            //baseQueryCounter++;
+
+                            if (tagsToExclude != null && questions[e2.Current].Tags.Any(t => tagsToExclude.Contains(t)))
+                            {
+                                excludedCounter++;
+                                continue;
+                            }
 
                             if (orNotHashSet.Contains(e2.Current) == false && seenBefore.Add(e2.Current))
                             {
@@ -261,8 +304,6 @@ namespace StackOverflowTagServer
                                 else
                                     itemsSkipped++;
                             }
-
-                            baseQueryCounter++;
                         }
                     }
                     break;
@@ -278,7 +319,8 @@ namespace StackOverflowTagServer
             Console.WriteLine(msg1);
             Trace.Write(msg1);
 
-            var msg2 = String.Format("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}", result.Count(), baseQueryCounter, itemsSkipped);
+            var msg2 = String.Format("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4} tags to be excluded)",
+                                     result.Count(), baseQueryCounter, itemsSkipped, excludedCounter, tagsToExclude != null ? tagsToExclude.Count.ToString() : "NO");
             Console.WriteLine(msg2);
             Trace.Write(msg2);
 
@@ -287,7 +329,7 @@ namespace StackOverflowTagServer
             //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
             //Console.WriteLine("\n");
 
-            return new QueryResult { Questions = result, Tag1QueryCounter = baseQueryCounter, Tag2QueryCounter = -1 };
+            return new QueryResult { Questions = result, Tag1QueryCounter = baseQueryCounter, Tag2QueryCounter = itemsSkipped };
         }
 
         internal List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize, int skip)

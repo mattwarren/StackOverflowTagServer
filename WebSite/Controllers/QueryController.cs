@@ -43,14 +43,14 @@ namespace Server.Controllers
             if (useLinq)
                 result = WebApiApplication.TagServer.Value.ComparisonQuery(type, tag, otherTag, @operator, pageSize, skip, tagsToExclude: leppieExpandedTags);
             else
-                result = WebApiApplication.TagServer.Value.ComparisonQueryNoLINQ(type, tag, otherTag, @operator, pageSize, skip);
+                result = WebApiApplication.TagServer.Value.ComparisonQueryNoLINQ(type, tag, otherTag, @operator, pageSize, skip, tagsToExclude: leppieExpandedTags);
 
             timer.Stop();
 
             return new
             {
                 Statistics = new {
-                    Elapsed = timer.Elapsed,
+                    //Elapsed = timer.Elapsed,
                     ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
                     Count = result.Questions.Count,
                     NumberOfQuestionsVisited = result.Tag1QueryCounter + result.Tag2QueryCounter,
@@ -63,13 +63,14 @@ namespace Server.Controllers
                     Skip = skip,
                     HttpContext.Current.Request.Path,
                     HttpContext.Current.Request.RawUrl,
-                    QueryString = HttpContext.Current.Request.QueryString
-                                            .ToPairs()
-                                            .ToDictionary(p => p.Key, p => p.Value),
+                    //QueryString = HttpContext.Current.Request.QueryString
+                    //                        .ToPairs()
+                    //                        .ToDictionary(p => p.Key, p => p.Value),
                     TagsBeforeExpansion = leppieWildcards.Count,
                     TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
-                    TagsExpansionElapsed = tagExpansionTimer.Elapsed,
+                    //TagsExpansionElapsed = tagExpansionTimer.Elapsed,
                     TagsExpansionMilliseconds = tagExpansionTimer.Elapsed.TotalMilliseconds.ToString("N2"),
+                    QuestionIds = result.Questions.Select(qu => qu.Id)
                 },
                 Results = result.Questions,
             };
