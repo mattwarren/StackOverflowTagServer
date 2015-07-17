@@ -258,9 +258,9 @@ namespace StackOverflowTagServer
                     var result5 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
                     var result6 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
 
-                    CompareLists(result1, "Regular", result4, "No LINQ");
-                    CompareLists(result2, "Regular", result5, "No LINQ");
-                    CompareLists(result3, "Regular", result6, "No LINQ");
+                    CompareLists(result1.Questions, "Regular", result4.Questions, "No LINQ");
+                    CompareLists(result2.Questions, "Regular", result5.Questions, "No LINQ");
+                    CompareLists(result3.Questions, "Regular", result6.Questions, "No LINQ");
 
                     //Console.ForegroundColor = ConsoleColor.DarkYellow;
                     //var result7 = tagServer.ComparisonQueryAdv(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);

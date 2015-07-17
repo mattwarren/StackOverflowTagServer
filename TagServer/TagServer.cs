@@ -253,12 +253,12 @@ namespace StackOverflowTagServer
             return queryProcessor.Query(type, tag, pageSize, skip);
         }
 
-        public List<Question> ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0, CLR.HashSet<string> tagsToExclude = null)
+        public QueryResult ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0, CLR.HashSet<string> tagsToExclude = null)
         {
             return queryProcessor.ComparisonQuery(type, tag1, tag2, @operator, pageSize, skip, tagsToExclude);
         }
 
-        public List<Question> ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0, CLR.HashSet<string> tagsToExclude = null)
+        public QueryResult ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0, CLR.HashSet<string> tagsToExclude = null)
         {
             return queryProcessor.ComparisonQueryNoLINQ(type, tag1, tag2, @operator, pageSize, skip, tagsToExclude);
         }

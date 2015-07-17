@@ -61,24 +61,25 @@ namespace StackOverflowTagServer
             return result;
         }
 
-        internal List<Question> ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, 
-                                                int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
+        internal QueryResult ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
         {
             var timer = Stopwatch.StartNew();
             TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
             ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
 
-            var baseQueryCounter = 0;
-            //IEnumerable<int> baseQuery = queryInfo[tag1];
-            IEnumerable <int> baseQuery = queryInfo[tag1].Select(t => { baseQueryCounter++; return t; });
+            var tag1QueryCounter = 0;
+            var tag2QueryCounter = 0;
+            IEnumerable<int> tag1Query = queryInfo[tag1].Select(t => { tag1QueryCounter++; return t; });
+            IEnumerable<int> tag2Query = queryInfo[tag2].Select(t => { tag2QueryCounter++; return t; });
+            IEnumerable<int> query = Enumerable.Empty<int>();
             switch (@operator)
             {
                 //Use Intersect for AND, Union for OR and Except for NOT
                 case "AND":
-                    baseQuery = baseQuery.Intersect(queryInfo[tag2]);
+                    query = tag1Query.Intersect(tag2Query);
                     if (tagsToExclude != null)
-                        baseQuery = baseQuery.Except(tagsToExclude.Select(tag => queryInfo[tag]).SelectMany(id => id));
+                        query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
                     break;
                 case "AND-NOT":
                     // TODO Complete this!!
@@ -92,30 +93,30 @@ namespace StackOverflowTagServer
                     //  1) pull the LARGEST value (from t1 or t2)
                     //  2) process this item
                     //  3) repeat 1) again
-                    baseQuery = baseQuery.Zip(queryInfo[tag2], (t1, t2) => new[] { t1, t2 })
+                    query = tag1Query.Zip(tag2Query, (t1, t2) => new[] { t1, t2 })
                                          .SelectMany(item => item)
                                          .Distinct();
                     if (tagsToExclude != null)
-                        baseQuery = baseQuery.Except(tagsToExclude.Select(tag => queryInfo[tag]).SelectMany(id => id));
+                        query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
                     break;
                 case "OR-NOT": //"i.e. .net+or+jquery-"
-                    baseQuery = baseQuery.Zip(queryInfo[TagServer.ALL_TAGS_KEY], (t1, t2) => new[] { t1, t2 })
+                    query = tag1Query.Zip(queryInfo[TagServer.ALL_TAGS_KEY], (t1, t2) => new[] { t1, t2 })
                                          .SelectMany(item => item)
-                                         .Except(queryInfo[tag2])
+                                         .Except(tag2Query)
                                          .Distinct();
                     if (tagsToExclude != null)
-                        baseQuery = baseQuery.Except(tagsToExclude.Select(tag => queryInfo[tag]).SelectMany(id => id));
+                        query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
                     break;
                 case "NOT":
-                    baseQuery = baseQuery.Except(queryInfo[tag2]);
+                    query = tag1Query.Except(tag2Query);
                     if (tagsToExclude != null)
-                        baseQuery = baseQuery.Except(tagsToExclude.Select(tag => queryInfo[tag]).SelectMany(id => id));
+                        query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
                     break;
                 default:
                     throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
             }
 
-            var result = baseQuery.Skip(skip)
+            var result = query.Skip(skip)
                             .Take(pageSize)
                             .Select(i => questions[i])
                             .ToList();
@@ -128,7 +129,8 @@ namespace StackOverflowTagServer
             Console.WriteLine(msg1);
             Trace.Write(msg1);
 
-            var msg2 = String.Format("Got {0:} results in total, baseQueryCounter = {1:N0}", result.Count(), baseQueryCounter);
+            var msg2 = String.Format("Got {0:} results in total, tag1 QueryCounter = {1:N0}, tag2 QueryCounter = {1:N0}",
+                                     result.Count(), tag1QueryCounter, tag2QueryCounter);
             Console.WriteLine(msg2);
             Trace.Write(msg2);
 
@@ -137,16 +139,17 @@ namespace StackOverflowTagServer
             //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
             //Console.WriteLine("\n");
 
-            return result;
+            return new QueryResult { Questions = result, Tag1QueryCounter = tag1QueryCounter, Tag2QueryCounter = tag2QueryCounter };
         }
 
-        internal List<Question> ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, 
-                                                      int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
+        internal QueryResult ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
         {
             var timer = Stopwatch.StartNew();
             TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
             ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
             ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
+
+            //TODO make these queries work with tagsToExclude!!!
 
             var result = new List<Question>(pageSize);
             int baseQueryCounter = 0;
@@ -284,7 +287,7 @@ namespace StackOverflowTagServer
             //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
             //Console.WriteLine("\n");
 
-            return result;
+            return new QueryResult { Questions = result, Tag1QueryCounter = baseQueryCounter, Tag2QueryCounter = -1 };
         }
 
         internal List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize, int skip)

@@ -114,6 +114,7 @@
     <Compile Include="DataStructures\QueryType.cs" />
     <Compile Include="DataStructures\SimpleBloomFilter.cs" />
     <Compile Include="DataStructures\TagInfo.cs" />
+    <Compile Include="QueryResult.cs" />
     <Compile Include="Results.cs" />
     <Compile Include="TagServer.cs" />
     <Compile Include="QueryTester.cs" />

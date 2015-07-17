@@ -63,7 +63,7 @@ namespace StackOverflowTagServer.DataStructures
 
             return string.Format(
                 "GC Collections - Gen0: {0}, Gen1: {1}, Gen2: {2}{3}",
-                Count.Gen0, Count.Gen1, Count.Gen2, 
+                Count.Gen0, Count.Gen1, Count.Gen2,
                 Count.Gen2 > 0 ? " ****" : string.Empty);
         }
     }

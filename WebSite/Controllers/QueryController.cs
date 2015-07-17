@@ -1,7 +1,6 @@
 ﻿using Server.Infrastructure;
 using StackOverflowTagServer;
 using StackOverflowTagServer.DataStructures;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Web;
@@ -25,6 +24,9 @@ namespace Server.Controllers
             var useLinq = QueryStringProcessor.GetBool(queryStringPairs, "useLinq", false);
             var useLeppieExclusions = QueryStringProcessor.GetBool(queryStringPairs, "leppieExclusions", false);
 
+            // This timer must include everything!! (i.e processing the wildcards and doing the query!!)
+            var timer = Stopwatch.StartNew();
+
             var leppieWildcards = WebApiApplication.LeppieWildcards.Value;
             StackOverflowTagServer.CLR.HashSet<string> leppieExpandedTags = null;
             var tagExpansionTimer = new Stopwatch();
@@ -37,25 +39,24 @@ namespace Server.Controllers
                 tagExpansionTimer.Stop();
             }
 
-            List<Shared.Question> results;
-            var timer = Stopwatch.StartNew();
+            QueryResult result;
             if (useLinq)
-                results = WebApiApplication.TagServer.Value.ComparisonQuery(type, tag, otherTag, @operator, pageSize, skip, tagsToExclude: leppieExpandedTags);
+                result = WebApiApplication.TagServer.Value.ComparisonQuery(type, tag, otherTag, @operator, pageSize, skip, tagsToExclude: leppieExpandedTags);
             else
-                results = WebApiApplication.TagServer.Value.ComparisonQueryNoLINQ(type, tag, otherTag, @operator, pageSize, skip);
+                result = WebApiApplication.TagServer.Value.ComparisonQueryNoLINQ(type, tag, otherTag, @operator, pageSize, skip);
+
             timer.Stop();
 
             return new
             {
-                Statistics = new
-                {
+                Statistics = new {
                     Elapsed = timer.Elapsed,
                     ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
-                    Count = results.Count,
+                    Count = result.Questions.Count,
+                    NumberOfQuestionsVisited = result.Tag1QueryCounter + result.Tag2QueryCounter,
                     TotalQuestionsForTag = WebApiApplication.TagServer.Value.TotalCount(type, tag)
                 },
-                DEBUGGING = new
-                {
+                DEBUGGING = new {
                     Tag = tag,
                     QueryType = type.ToString(),
                     PageSize = pageSize,
@@ -70,7 +71,7 @@ namespace Server.Controllers
                     TagsExpansionElapsed = tagExpansionTimer.Elapsed,
                     TagsExpansionMilliseconds = tagExpansionTimer.Elapsed.TotalMilliseconds.ToString("N2"),
                 },
-                Results = results,
+                Results = result.Questions,
             };
         }
 
@@ -87,7 +88,7 @@ namespace Server.Controllers
                 Count = WebApiApplication.LeppieWildcards.Value.Count,
                 JustWildcardsCount = justWildcards.Count,
                 JustWildcards = justWildcards,
-                All = WebApiApplication.LeppieWildcards.Value.OrderBy(t => t)
+                FullList = WebApiApplication.LeppieWildcards.Value.OrderBy(t => t)
             };
         }
 
@@ -98,10 +99,14 @@ namespace Server.Controllers
             var allTags = WebApiApplication.TagServer.Value.AllTags;
             var leppieWildcards = WebApiApplication.LeppieWildcards.Value;
             var nGrams = WebApiApplication.NGrams.Value;
+            var expandedWildcards = WildcardProcessor.ExpandTagsNGrams(allTags, leppieWildcards, nGrams)
+                                                    .OrderBy(t => t)
+                                                    .ToList();
             return new
             {
                 Count = leppieWildcards.Count,
-                All = WildcardProcessor.ExpandTagsNGrams(allTags, leppieWildcards, nGrams).OrderBy(t => t)
+                ExpandedCount = expandedWildcards.Count,
+                ExpandedWildcards = expandedWildcards
             };
         }
     }

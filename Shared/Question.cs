@@ -16,8 +16,8 @@ namespace Shared
         public string RawTags { get; set; }
 
         private IList<string> tagList = null;
-        public IList<string> Tags 
-        { 
+        public IList<string> Tags
+        {
             get
             {
                 if (tagList == null)
@@ -50,15 +50,15 @@ namespace Shared
             return base.ToString();
 
             // Print the full Question for each result (this is harder to read!!
-            //Console.WriteLine("\t{0}", string.Join("\n\t", result.Select(r => new 
-            //                                                    { 
-            //                                                        r.Id, 
+            //Console.WriteLine("\t{0}", string.Join("\n\t", result.Select(r => new
+            //                                                    {
+            //                                                        r.Id,
             //                                                        Tags = string.Join(", ", r.Tags),
             //                                                        r.LastActivityDate,
             //                                                        r.CreationDate,
             //                                                        r.Score,
             //                                                        r.ViewCount,
-            //                                                        r.AnswerCount 
+            //                                                        r.AnswerCount
             //                                                    })));
         }
     }
