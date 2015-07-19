@@ -44,7 +44,7 @@ namespace Server.Infrastructure
                 var match = parameters.First(p => p.Key.ToLowerInvariant() == name.ToLowerInvariant());
                 if (String.Compare(match.Value, "true", ignoreCase: true) == 0)
                     return true;
-                if (String.Compare(match.Value, "fakse", ignoreCase: true) == 0)
+                if (String.Compare(match.Value, "false", ignoreCase: true) == 0)
                     return false;
             }
             return defaultValue;

@@ -1,5 +1,4 @@
 ﻿using Shared;
-using System;
 using System.Collections.Generic;
 
 namespace StackOverflowTagServer
@@ -8,8 +7,6 @@ namespace StackOverflowTagServer
     {
         public List<Question> Questions { get; set; }
 
-        public int Tag1QueryCounter { get; set; }
-
-        public int Tag2QueryCounter { get; set; }
+        public Dictionary<string, int> Counters { get; set; }
     }
 }

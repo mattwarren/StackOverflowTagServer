@@ -139,7 +139,15 @@ namespace StackOverflowTagServer
             //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
             //Console.WriteLine("\n");
 
-            return new QueryResult { Questions = result, Tag1QueryCounter = tag1QueryCounter, Tag2QueryCounter = tag2QueryCounter };
+            return new QueryResult
+            {
+                Questions = result,
+                Counters = new Dictionary<string, int>
+                {
+                    { "Tag1QueryCounter", tag1QueryCounter },
+                    { "Tag2QueryCounter", tag2QueryCounter }
+                }
+            };
         }
 
         internal QueryResult ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
@@ -149,15 +157,12 @@ namespace StackOverflowTagServer
             ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
             ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
 
-            //TODO make these queries work with tagsToExclude!!!
-
             var result = new List<Question>(pageSize);
             int baseQueryCounter = 0;
             int itemsSkipped = 0;
             int excludedCounter = 0;
             switch (@operator)
             {
-                //Use Intersect for AND, Union for OR and Except for NOT
                 case "AND":
                     // From https://github.com/ungood/EduLinq/blob/master/Edulinq/Intersect.cs#L28-L42
                     var andHashSet = GetCachedHashSet(queryInfo[tag2]);
@@ -171,10 +176,8 @@ namespace StackOverflowTagServer
                         if (tagsToExclude != null && questions[item].Tags.Any(t => tagsToExclude.Contains(t)))
                         {
                             excludedCounter++;
-                            continue;
                         }
-
-                        if (andHashSet.Contains(item))
+                        else if (andHashSet.Contains(item))
                         {
                             andHashSet.Remove(item);
                             if (itemsSkipped >= skip)
@@ -185,6 +188,12 @@ namespace StackOverflowTagServer
                     }
                     break;
                 case "OR":
+                    // TODO this has a small bug, we can get items out of order as we pull them thru in pairs
+                    // if t2 has several items that are larger than t1, t1 will still come out first!!
+                    // So algorithm needs to be:
+                    //  1) pull the LARGEST value (from t1 or t2)
+                    //  2) process this item
+                    //  3) repeat 1) again
                     // From http://referencesource.microsoft.com/#System.Core/System/Linq/Enumerable.cs,2b8d0f02389aab71
                     var alreadySeen = GetCachedHashSet();
                     using (IEnumerator<int> e1 = queryInfo[tag1].AsEnumerable().GetEnumerator())
@@ -200,11 +209,8 @@ namespace StackOverflowTagServer
                             if (tagsToExclude != null && questions[e1.Current].Tags.Any(t => tagsToExclude.Contains(t)))
                             {
                                 excludedCounter++;
-                                continue;
                             }
-
-                            // See if we can use Tag1
-                            if (alreadySeen.Add(e1.Current))
+                            else if (alreadySeen.Add(e1.Current))
                             {
                                 if (itemsSkipped >= skip)
                                     result.Add(questions[e1.Current]);
@@ -220,11 +226,8 @@ namespace StackOverflowTagServer
                             if (tagsToExclude != null && questions[e2.Current].Tags.Any(t => tagsToExclude.Contains(t)))
                             {
                                 excludedCounter++;
-                                continue;
                             }
-
-                            // See if we can use Tag2
-                            if (alreadySeen.Add(e2.Current))
+                            else if (alreadySeen.Add(e2.Current))
                             {
                                 if (itemsSkipped >= skip)
                                     result.Add(questions[e2.Current]);
@@ -247,10 +250,8 @@ namespace StackOverflowTagServer
                         if (tagsToExclude != null && questions[item].Tags.Any(t => tagsToExclude.Contains(t)))
                         {
                             excludedCounter++;
-                            continue;
                         }
-
-                        if (notHashSet.Add(item))
+                        else if (notHashSet.Add(item))
                         {
                             if (itemsSkipped >= skip)
                                 result.Add(questions[item]);
@@ -275,10 +276,8 @@ namespace StackOverflowTagServer
                             if (tagsToExclude != null && questions[e1.Current].Tags.Any(t => tagsToExclude.Contains(t)))
                             {
                                 excludedCounter++;
-                                continue;
                             }
-
-                            if (orNotHashSet.Contains(e1.Current) == false && seenBefore.Add(e1.Current))
+                            else if (orNotHashSet.Contains(e1.Current) == false && seenBefore.Add(e1.Current))
                             {
                                 if (itemsSkipped >= skip)
                                     result.Add(questions[e1.Current]);
@@ -294,10 +293,8 @@ namespace StackOverflowTagServer
                             if (tagsToExclude != null && questions[e2.Current].Tags.Any(t => tagsToExclude.Contains(t)))
                             {
                                 excludedCounter++;
-                                continue;
                             }
-
-                            if (orNotHashSet.Contains(e2.Current) == false && seenBefore.Add(e2.Current))
+                            else if (orNotHashSet.Contains(e2.Current) == false && seenBefore.Add(e2.Current))
                             {
                                 if (itemsSkipped >= skip)
                                     result.Add(questions[e2.Current]);
@@ -319,7 +316,7 @@ namespace StackOverflowTagServer
             Console.WriteLine(msg1);
             Trace.Write(msg1);
 
-            var msg2 = String.Format("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4} tags to be excluded)",
+            var msg2 = String.Format("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4:N0} tags to be excluded)",
                                      result.Count(), baseQueryCounter, itemsSkipped, excludedCounter, tagsToExclude != null ? tagsToExclude.Count.ToString() : "NO");
             Console.WriteLine(msg2);
             Trace.Write(msg2);
@@ -329,7 +326,16 @@ namespace StackOverflowTagServer
             //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
             //Console.WriteLine("\n");
 
-            return new QueryResult { Questions = result, Tag1QueryCounter = baseQueryCounter, Tag2QueryCounter = itemsSkipped };
+            return new QueryResult
+            {
+                Questions = result,
+                Counters = new Dictionary<string, int>
+                {
+                    { "BaseQueryCounter", baseQueryCounter },
+                    { "ItemsSkipped", itemsSkipped },
+                    { "ExcludedCounter", excludedCounter }
+                }
+            };
         }
 
         internal List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize, int skip)

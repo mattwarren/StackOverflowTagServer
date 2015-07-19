@@ -5,6 +5,9 @@ using System.Diagnostics;
 using System.Linq;
 using System.Web;
 using System.Web.Http;
+using Shared;
+using System;
+using System.Collections.Generic;
 
 namespace Server.Controllers
 {
@@ -20,7 +23,7 @@ namespace Server.Controllers
             var pageSize = QueryStringProcessor.GetInt(queryStringPairs, "pageSize", 50);
             var skip = QueryStringProcessor.GetInt(queryStringPairs, "skip", 0);
             var otherTag = QueryStringProcessor.GetString(queryStringPairs, "otherTag", "");
-            var @operator = QueryStringProcessor.GetString(queryStringPairs, "operator", "NOT");
+            var @operator = QueryStringProcessor.GetString(queryStringPairs, "operator", "AND");
             var useLinq = QueryStringProcessor.GetBool(queryStringPairs, "useLinq", false);
             var useLeppieExclusions = QueryStringProcessor.GetBool(queryStringPairs, "leppieExclusions", false);
 
@@ -50,11 +53,10 @@ namespace Server.Controllers
             return new
             {
                 Statistics = new {
-                    //Elapsed = timer.Elapsed,
                     ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
                     Count = result.Questions.Count,
-                    NumberOfQuestionsVisited = result.Tag1QueryCounter + result.Tag2QueryCounter,
-                    TotalQuestionsForTag = WebApiApplication.TagServer.Value.TotalCount(type, tag)
+                    TotalQuestionsForTag = WebApiApplication.TagServer.Value.TotalCount(type, tag),
+                    Counters = result.Counters
                 },
                 DEBUGGING = new {
                     Tag = tag,
@@ -63,17 +65,58 @@ namespace Server.Controllers
                     Skip = skip,
                     HttpContext.Current.Request.Path,
                     HttpContext.Current.Request.RawUrl,
-                    //QueryString = HttpContext.Current.Request.QueryString
-                    //                        .ToPairs()
-                    //                        .ToDictionary(p => p.Key, p => p.Value),
+                    QueryString = HttpContext.Current.Request.QueryString
+                                            .ToPairs()
+                                            .ToDictionary(p => p.Key, p => p.Value),
                     TagsBeforeExpansion = leppieWildcards.Count,
                     TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
-                    //TagsExpansionElapsed = tagExpansionTimer.Elapsed,
                     TagsExpansionMilliseconds = tagExpansionTimer.Elapsed.TotalMilliseconds.ToString("N2"),
-                    QuestionIds = result.Questions.Select(qu => qu.Id)
+                    QuestionIds = result.Questions.Select(qu => qu.Id),
+                    InvalidResults = GetInvalidResults(result.Questions, tag, otherTag, type, @operator),
+                    ShouldHaveBeenExcludedResults = GetShouldHaveBeenExcludedResults(result.Questions, type, @operator, leppieExpandedTags)
                 },
                 Results = result.Questions,
             };
+        }
+
+        private List<Question> GetInvalidResults(List<Question> results, string tag, string otherTag, QueryType type, string @operator)
+        {
+            var invalidResults = new List<Question>();
+            switch (@operator)
+            {
+                case "AND":
+                    var andMatches = results.Where(q => q.Tags.Any(t => t == tag && t == otherTag));
+                    invalidResults.AddRange(results.Except(andMatches));
+                    break;
+                case "AND-NOT":
+                    var andNotMatches = results.Where(q => q.Tags.Any(t => t == tag && t != otherTag));
+                    invalidResults.AddRange(results.Except(andNotMatches));
+                    break;
+                case "OR":
+                    var orMatches = results.Where(q => q.Tags.Any(t => t == tag || t == otherTag));
+                    invalidResults.AddRange(results.Except(orMatches));
+                    break;
+                case "OR-NOT":
+                    var orNotMatches = results.Where(q => q.Tags.Any(t => t == tag || t != otherTag));
+                    invalidResults.AddRange(results.Except(orNotMatches));
+                    break;
+                case "NOT":
+                    var notMatches = results.Where(q => q.Tags.Any(t => t == tag && t != otherTag));
+                    invalidResults.AddRange(results.Except(notMatches));
+                    break;
+                default:
+                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
+            }
+            return invalidResults;
+        }
+
+        private List<Question> GetShouldHaveBeenExcludedResults(List<Question> results, QueryType type, string @operator,
+                                                                StackOverflowTagServer.CLR.HashSet<string> tagsToExclude)
+        {
+            if (tagsToExclude == null)
+                return new List<Question>();
+
+            return results.Where(q => q.Tags.Any(t => tagsToExclude.Contains(t))).ToList();
         }
 
         [Route("api/Query/LeppieWildcards")]
