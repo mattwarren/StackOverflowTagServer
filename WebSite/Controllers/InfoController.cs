@@ -1,5 +1,6 @@
 ﻿using Microsoft.ApplicationInsights;
 using StackOverflowTagServer;
+using StackOverflowTagServer.DataStructures;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -52,6 +53,17 @@ namespace Server.Controllers
                         { urlRoot + "Query/.net?operator=OR-NOT&otherTag=jquery&useLinq=true", "OR NOT, i.e. 'C# OR NOT jQuery' BUT using LINQ" },
                         { urlRoot + "Query/.net?operator=NOT&otherTag=jquery", "NOT, i.e. 'C# NOT jQuery'" },
                     }.ToArray(),
+                    AdvancedQueryParameters = new Dictionary<string, string>
+                    {
+                        { "OtherTag", "i.e. 'c# AND jQuery' (&otherTag=jquery)" },
+                        { "Type", "Can be " + String.Join(", ", Enum.GetNames(typeof(QueryType))) },
+                        { "Operator", "Can be 'AND', 'AND-NOT', 'OR', 'OR-NOT', 'NOT'" },
+                        { "PageSize", "1 to 50" },
+                        { "Skip", "0 to 'as many as you want!!'" },
+                        { "UseLinq", "i.e. '&UseLinq=true' (will be slower than the default mode)" },
+                        { "UseLeppieExclusions", "See " + urlRoot + "Query/LeppieExcludedTags for the full list" },
+                        { "DebugMode", "i.e. '&DebugMode=true'" }
+                    },
                     //RelatedTagQueries = new Dictionary<string, string>
                     //{
                     //}.ToArray(),
