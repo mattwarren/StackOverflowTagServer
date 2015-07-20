@@ -33,12 +33,11 @@ namespace StackOverflowTagServer.Querying
 
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Console.WriteLine("Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms)",
-                                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Log("Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms)",
+                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
             var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(", ", r.Tags)));
-            Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            Console.WriteLine("\n");
+            Log("  {0}\n", string.Join("\n  ", formattedResults));
 
             return result;
         }
@@ -65,17 +64,17 @@ namespace StackOverflowTagServer.Querying
             gcInfo.UpdateCollectionInfo();
 
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
-            Console.WriteLine("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
+            Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Console.WriteLine("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - SLOW",
-                                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - SLOW",
+                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            Console.WriteLine("Got {0} results", results.Count());
-            Console.WriteLine(gcInfo.ToString());
+            Log("Got {0} results", results.Count());
+            Log(gcInfo.ToString());
             //var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            Console.WriteLine();
+            //Log("  {0}", string.Join("\n  ", formattedResults));
+            Log("");
 
             return results;
         }
@@ -109,18 +108,18 @@ namespace StackOverflowTagServer.Querying
             timer.Stop();
             gcInfo.UpdateCollectionInfo();
 
-            Console.WriteLine("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
+            Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Console.WriteLine("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - FAST",
-                                        type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - FAST",
+                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            Console.WriteLine("Got {0} results, {1:N0} items left in baseHashSet", results.Count(), baseHashSet.Count);
-            Console.WriteLine(gcInfo.ToString());
+            Log("Got {0} results, {1:N0} items left in baseHashSet", results.Count(), baseHashSet.Count);
+            Log(gcInfo.ToString());
             //var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            Console.WriteLine();
+            //Log("  {0}", string.Join("\n  ", formattedResults));
+            Log("");
 
             return results;
         }
@@ -166,18 +165,18 @@ namespace StackOverflowTagServer.Querying
             timer.Stop();
             gcInfo.UpdateCollectionInfo();
 
-            Console.WriteLine("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
+            Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Console.WriteLine("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - FAST ALT",
-                                        type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - FAST ALT",
+                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            Console.WriteLine("Got {0} results ({1} in allResults), {2:N0} items in exclusions", results.Count(), allResults.Count, exclusions.Count);
-            Console.WriteLine(gcInfo.ToString());
+            Log("Got {0} results ({1} in allResults), {2:N0} items in exclusions", results.Count(), allResults.Count, exclusions.Count);
+            Log(gcInfo.ToString());
             //var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            Console.WriteLine();
+            //Log("  {0}", string.Join("\n  ", formattedResults));
+            Log("");
 
             return results;
         }
@@ -203,8 +202,8 @@ namespace StackOverflowTagServer.Querying
             var bloomFilterCreationTimer = Stopwatch.StartNew();
             var bloomFilter = new SimpleBloomFilter(bloomFilterSize);
             bloomFilterCreationTimer.Stop();
-            Console.WriteLine("Took {0} ({1:N2} ms) to create the bloom filter with {2:N0} bits ({3:N2} bytes)",
-                              bloomFilterCreationTimer.Elapsed, bloomFilterCreationTimer.Elapsed.TotalMilliseconds, bloomFilterSize, bloomFilterSize / 8);
+            Log("Took {0} ({1:N2} ms) to create the bloom filter with {2:N0} bits ({3:N2} bytes)",
+                bloomFilterCreationTimer.Elapsed, bloomFilterCreationTimer.Elapsed.TotalMilliseconds, bloomFilterSize, bloomFilterSize / 8);
 #else
             var bloomFilter = new SimpleBloomFilter(bloomFilterSize);
 #endif
@@ -227,8 +226,8 @@ namespace StackOverflowTagServer.Querying
                         // It it's false, it's DEFINITELY false
                         // It it's true, it could really be false (false +ve)
                         var possiblyExists = bloomFilter.PossiblyExists(qu, debugInfo: true);
-                        Console.WriteLine("Bloom Filter.PossiblyExists - {0,8} = {1} ****", qu, possiblyExists);
-                        Console.WriteLine("  DebuggingHashSet.Contains - {0,8} = {1} ****", qu, debugging.Contains(qu));
+                        Log("Bloom Filter.PossiblyExists - {0,8} = {1} ****", qu, possiblyExists);
+                        Log("  DebuggingHashSet.Contains - {0,8} = {1} ****", qu, debugging.Contains(qu));
                     }
 #endif
                 }
@@ -245,8 +244,8 @@ namespace StackOverflowTagServer.Querying
                         if (debugging.Contains(b) == false)
                         {
                             var qu = questions[b];
-                            Console.WriteLine("FALSE +VE: {0,8}, PossiblyExists = {1}, debugging.Contains() = {2}, Id = {3,8}, Tags = {4}",
-                                              b, possiblyExists, debugging.Contains(b), qu.Id, string.Join(",", qu.Tags));
+                            Log("FALSE +VE: {0,8}, PossiblyExists = {1}, debugging.Contains() = {2}, Id = {3,8}, Tags = {4}",
+                                b, possiblyExists, debugging.Contains(b), qu.Id, string.Join(",", qu.Tags));
                         }
                         return false; // we can't use it
                     })
@@ -260,28 +259,28 @@ namespace StackOverflowTagServer.Querying
             timer.Stop();
             gcInfo.UpdateCollectionInfo();
 
-            Console.WriteLine("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
+            Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Console.WriteLine("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - BLOOM",
-                                        type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - BLOOM",
+                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            //Console.WriteLine("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes), Truthiness {2:N2}",
-            //                  result.Count(), bloomFilter.NumberOfItems, bloomFilter.Truthiness);
-            Console.WriteLine("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes)", result.Count(), bloomFilter.NumberOfItems);
-            Console.WriteLine(gcInfo.ToString());
+            //Log("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes), Truthiness {2:N2}",
+            //    result.Count(), bloomFilter.NumberOfItems, bloomFilter.Truthiness);
+            Log("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes)", result.Count(), bloomFilter.NumberOfItems);
+            Log(gcInfo.ToString());
             //var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            Console.WriteLine();
+            //Log("  {0}", string.Join("\n  ", formattedResults));
+            Log("");
 
 #if DEBUG
             foreach (var item in tests)
             {
                 var possiblyExists = bloomFilter.PossiblyExists(item, debugInfo: true);
-                Console.WriteLine("Bloom Filter.PossiblyExists - {0,8} = {1}", item, possiblyExists);
-                Console.WriteLine("  DebuggingHashSet.Contains - {0,8} = {1}", item, debugging.Contains(item));
-                Console.WriteLine();
+                Log("Bloom Filter.PossiblyExists - {0,8} = {1}", item, possiblyExists);
+                Log("  DebuggingHashSet.Contains - {0,8} = {1}", item, debugging.Contains(item));
+                Log("");
             }
             // When the values in "tests" represent Question Id
             //var testResults = tests.Select(t => questions.First(qu => qu.Id == t))
@@ -289,7 +288,7 @@ namespace StackOverflowTagServer.Querying
             // When the values in "tests" represent array indexes, i.e. questions[x]
             var testResults = tests.Select(t => questions[t])
                                     .Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            Console.WriteLine("  {0}", string.Join("\n  ", testResults));
+            Log("  {0}", string.Join("\n  ", testResults));
 #endif
 
             return result;

@@ -6,7 +6,6 @@ using System.Diagnostics;
 using System.Linq;
 
 using HashSet = StackOverflowTagServer.CLR.HashSet<int>;
-//using HashSet = System.Collections.Generic.HashSet<int>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 
 namespace StackOverflowTagServer.Querying
@@ -18,19 +17,19 @@ namespace StackOverflowTagServer.Querying
         {
         }
 
-        internal QueryResult Query(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
+        internal QueryResult Query(QueryInfo info, CLR.HashSet<string> tagsToExclude = null)
         {
             var timer = Stopwatch.StartNew();
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
-            ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
-            ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(info.Type);
+            ThrowIfInvalidParameters(info.Tag, info.PageSize, queryInfo);
+            ThrowIfInvalidParameters(info.OtherTag, info.PageSize, queryInfo);
 
-            var tag1QueryCounter = 0;
-            var tag2QueryCounter = 0;
-            IEnumerable<int> tag1Query = queryInfo[tag1].Select(t => { tag1QueryCounter++; return t; });
-            IEnumerable<int> tag2Query = queryInfo[tag2].Select(t => { tag2QueryCounter++; return t; });
+            var tagCounter = 0;
+            var otherTagCounter = 0;
+            IEnumerable<int> tag1Query = queryInfo[info.Tag].Select(t => { tagCounter++; return t; });
+            IEnumerable<int> tag2Query = queryInfo[info.OtherTag].Select(t => { otherTagCounter++; return t; });
             IEnumerable<int> query = Enumerable.Empty<int>();
-            switch (@operator)
+            switch (info.Operator)
             {
                 //Use Intersect for AND, Union for OR and Except for NOT
                 case "AND":
@@ -71,93 +70,75 @@ namespace StackOverflowTagServer.Querying
                     if (tagsToExclude != null)
                         query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
                     break;
+
                 default:
-                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
+                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", info.Operator ?? "<NULL>"));
             }
 
-            var result = query.Skip(skip)
-                            .Take(pageSize)
+            var result = query.Skip(info.Skip)
+                            .Take(info.PageSize)
                             .Select(i => questions[i])
                             .ToList();
             timer.Stop();
 
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
 
-            var msg1 = String.Format("REGULAR  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) REGULAR",
-                                     tag1, @operator, tag2, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
-            Console.WriteLine(msg1);
-            Trace.Write(msg1);
-
-            var msg2 = String.Format("Got {0:} results in total, tag1 QueryCounter = {1:N0}, tag2 QueryCounter = {1:N0}",
-                                     result.Count(), tag1QueryCounter, tag2QueryCounter);
-            Console.WriteLine(msg2);
-            Trace.Write(msg2);
-
-            //Func<Question, string> fieldSelector = GetFieldSelector(type);
-            //var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            //Console.WriteLine("\n");
+            Log("REGULAR  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) REGULAR",
+                info.Tag, info.Operator, info.OtherTag, info.PageSize, info.Skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+            Log("Got {0:} results in total, tag1 QueryCounter = {1:N0}, tag2 QueryCounter = {1:N0}",
+                result.Count(), tagCounter, otherTagCounter);
 
             return new QueryResult
             {
                 Questions = result,
                 Counters = new Dictionary<string, int>
                 {
-                    { "TagCounter", tag1QueryCounter },
-                    { "OtherTagCounter", tag2QueryCounter }
+                    { "TagCounter", tagCounter },
+                    { "OtherTagCounter", otherTagCounter }
                 }
             };
         }
 
-        internal QueryResult QueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
+        internal QueryResult QueryNoLINQ(QueryInfo info, CLR.HashSet<string> tagsToExclude = null)
         {
             var timer = Stopwatch.StartNew();
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
-            ThrowIfInvalidParameters(tag1, pageSize, queryInfo);
-            ThrowIfInvalidParameters(tag2, pageSize, queryInfo);
+            TagByQueryLookup queryInfo = GetQueryTypeInfo(info.Type);
+            ThrowIfInvalidParameters(info.Tag, info.PageSize, queryInfo);
+            ThrowIfInvalidParameters(info.OtherTag, info.PageSize, queryInfo);
 
             ComplexQueryResult queryResult = null;
-            switch (@operator)
+            switch (info.Operator)
             {
                 case "AND":
-                    queryResult = AndQuery(queryInfo[tag1], queryInfo[tag2], pageSize, skip, tagsToExclude);
+                    queryResult = AndQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
                     break;
                 // TODO Complete this!!
                 //case "AND-NOT":
                 //    break;
 
                 case "OR":
-                    queryResult = OrQuery(queryInfo[tag1], queryInfo[tag2], pageSize, skip, tagsToExclude);
+                    queryResult = OrQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
                     break;
                 case "OR-NOT": //"i.e. .net+or+jquery-"
-                    queryResult = OrNotQuery(queryInfo[tag1], queryInfo[tag2], queryInfo[TagServer.ALL_TAGS_KEY], pageSize, skip, tagsToExclude);
+                    queryResult = OrNotQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], queryInfo[TagServer.ALL_TAGS_KEY], info.PageSize, info.Skip, tagsToExclude);
                     break;
 
                 case "NOT":
-                    queryResult = NotQuery(queryInfo[tag1], queryInfo[tag2], pageSize, skip, tagsToExclude);
+                    queryResult = NotQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
                     break;
+
                 default:
-                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
+                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", info.Operator ?? "<NULL>"));
             }
             timer.Stop();
 
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
 
-            var msg1 = String.Format("NO LINQ  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) NO LINQ",
-                                     tag1, @operator, tag2, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
-            Console.WriteLine(msg1);
-            Trace.Write(msg1);
-
-            var msg2 = String.Format("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4} tags to be excluded)",
-                                     queryResult.Results.Count(), queryResult.BaseQueryCounter, queryResult.ItemsSkipped,
-                                     queryResult.ExcludedCounter, tagsToExclude != null ? tagsToExclude.Count.ToString("N0") : "NO");
-            Console.WriteLine(msg2);
-            Trace.Write(msg2);
-
-            //Func<Question, string> fieldSelector = GetFieldSelector(type);
-            //var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            //Console.WriteLine("  {0}", string.Join("\n  ", formattedResults));
-            //Console.WriteLine("\n");
+            Log("NO LINQ  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) NO LINQ",
+                info.Tag, info.Operator, info.OtherTag, info.PageSize, info.Skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+            Log("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4} tags to be excluded)",
+                queryResult.Results.Count(), queryResult.BaseQueryCounter, queryResult.ItemsSkipped,
+                queryResult.ExcludedCounter, tagsToExclude != null ? tagsToExclude.Count.ToString("N0") : "NO");
 
             return new QueryResult
             {

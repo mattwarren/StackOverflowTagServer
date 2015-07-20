@@ -9,7 +9,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
-//using HashSet = System.Collections.Generic.HashSet<string>;
 using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 

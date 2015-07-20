@@ -2,11 +2,11 @@
 using StackOverflowTagServer.DataStructures;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
 
 using HashSet = StackOverflowTagServer.CLR.HashSet<int>;
-//using HashSet = System.Collections.Generic.HashSet<int>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 
 namespace StackOverflowTagServer.Querying
@@ -79,6 +79,13 @@ namespace StackOverflowTagServer.Querying
 
             if (pageSize < 1 || pageSize > 250)
                 throw new InvalidOperationException(string.Format("Invalid page size provided: {0}, only values from 1 to 250 are allowed", pageSize));
-        }       
+        }
+
+        protected static void Log(string format, params object[] args)
+        {
+            var msg = string.Format(format, args);
+            Console.WriteLine(msg);
+            Trace.WriteLine(msg);
+        }
     }
 }

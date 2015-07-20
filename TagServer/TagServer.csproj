@@ -112,6 +112,7 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="Querying\QueryInfo.cs" />
     <Compile Include="Querying\QueryProcessor.cs" />
     <Compile Include="DataStructures\QueryType.cs" />
     <Compile Include="DataStructures\SimpleBloomFilter.cs" />
