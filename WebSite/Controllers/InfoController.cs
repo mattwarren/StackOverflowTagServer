@@ -59,6 +59,11 @@ namespace Server.Controllers
                     {
                         { urlRoot + "Questions/472906", "Get an individual question (by Id)" },
                     }.ToArray(),
+                    Wildcards = new Dictionary<string, string>
+                    {
+                        { urlRoot + "/Wildcard/?wildcards=*c%23*,*java*", "Show all the Tags that matches the given wildcards (comma seperated list, starts-with, end-with or contains only)" },
+                        { urlRoot + "/Wildcard/?wildcards=*c%23,c%23*,.net", "Show all the Tags that matches the given wildcards (comma seperated list, starts-with, end-with or contains only)" },
+                    }.ToArray(),
                 },
                 SetupMessages = TagServer.Messages,
                 Top50Tags = tagServer.AllTags

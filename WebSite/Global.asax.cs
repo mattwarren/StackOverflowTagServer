@@ -39,11 +39,12 @@ namespace Server
             RouteConfig.RegisterRoutes(RouteTable.Routes);
             BundleConfig.RegisterBundles(BundleTable.Bundles);
 
-            // For initialisation to happen here, rather than waiting for the first request
+            // Force initialisation to happen here, rather than waiting for the first request
             try
             {
                 Trace.Write("Starting TagServer");
-                var temp = WebApiApplication.TagServer.Value;
+                var tempTags = WebApiApplication.TagServer.Value;
+                var tempNGrams = WebApiApplication.NGrams.Value;
             }
             catch (Exception ex)
             {
