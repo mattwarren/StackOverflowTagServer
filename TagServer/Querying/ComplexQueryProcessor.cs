@@ -26,6 +26,7 @@ namespace StackOverflowTagServer.Querying
 
             var tagCounter = 0;
             var otherTagCounter = 0;
+            var exclusionCounter = new CounterWrapper(initialValue: 0);
             IEnumerable<int> tag1Query = queryInfo[info.Tag].Select(t => { tagCounter++; return t; });
             IEnumerable<int> tag2Query = queryInfo[info.OtherTag].Select(t => { otherTagCounter++; return t; });
             IEnumerable<int> query = Enumerable.Empty<int>();
@@ -35,7 +36,7 @@ namespace StackOverflowTagServer.Querying
                 case "AND":
                     query = tag1Query.Intersect(tag2Query);
                     if (tagsToExclude != null)
-                        query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
+                        query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
                     break;
                 // TODO Complete this!!
                 //case "AND-NOT":
@@ -54,7 +55,7 @@ namespace StackOverflowTagServer.Querying
                                          .SelectMany(item => item)
                                          .Distinct();
                     if (tagsToExclude != null)
-                        query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
+                        query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
                     break;
                 case "OR-NOT": //"i.e. .net+or+jquery-"
                     query = tag1Query.Zip(queryInfo[TagServer.ALL_TAGS_KEY], (t1, t2) => new[] { t1, t2 })
@@ -62,13 +63,13 @@ namespace StackOverflowTagServer.Querying
                                          .Except(tag2Query)
                                          .Distinct();
                     if (tagsToExclude != null)
-                        query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
+                        query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
                     break;
 
                 case "NOT":
                     query = tag1Query.Except(tag2Query);
                     if (tagsToExclude != null)
-                        query = query.Where(i => questions[i].Tags.All(t => tagsToExclude.Contains(t) == false));
+                        query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
                     break;
 
                 default:
@@ -94,9 +95,33 @@ namespace StackOverflowTagServer.Querying
                 Counters = new Dictionary<string, int>
                 {
                     { "TagCounter", tagCounter },
-                    { "OtherTagCounter", otherTagCounter }
+                    { "OtherTagCounter", otherTagCounter },
+                    { "ExclusionCounter", exclusionCounter.Counter }
                 }
             };
+        }
+
+        private IEnumerable<int> AddExclusionsToQuery(IEnumerable<int> query, CLR.HashSet<string> tagsToExclude, CounterWrapper exclusionCounter)
+        {
+            return query.Where(i =>
+            {
+                if (questions[i].Tags.All(t => tagsToExclude.Contains(t) == false))
+                {
+                    return true;
+                }
+                exclusionCounter.Counter++;
+                return false;
+            });
+        }
+
+        class CounterWrapper
+        {
+            public CounterWrapper(int initialValue)
+            {
+                Counter = initialValue;
+            }
+
+            public int Counter { get; set; }
         }
 
         internal QueryResult QueryNoLINQ(QueryInfo info, CLR.HashSet<string> tagsToExclude = null)

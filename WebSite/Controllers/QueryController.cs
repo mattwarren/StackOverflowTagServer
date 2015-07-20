@@ -48,7 +48,7 @@ namespace Server.Controllers
             var jsonResults = new Dictionary<string, object>();
             jsonResults.Add("Statistics", GetStatistics(queryInfo, result, timer.Elapsed));
             if (queryInfo.DebugMode)
-                jsonResults.Add("DEBUGGING", GetDebugInfo(queryInfo, result, timer.Elapsed, leppieWildcards, leppieExpandedTags));
+                jsonResults.Add("DEBUGGING", GetDebugInfo(queryInfo, result, tagExpansionTimer.Elapsed, timer.Elapsed, leppieWildcards, leppieExpandedTags));
             jsonResults.Add("Results", result.Questions);
             return jsonResults;
         }
@@ -92,8 +92,9 @@ namespace Server.Controllers
             };
         }
 
-
-        private object GetDebugInfo(QueryInfo queryInfo, QueryResult result, TimeSpan elapsed, List<string> leppieWildcards, HashSet leppieExpandedTags)
+        private object GetDebugInfo(QueryInfo queryInfo, QueryResult result,
+                                    TimeSpan tagsExpansionTime, TimeSpan totalTime,
+                                    List<string> leppieWildcards, HashSet leppieExpandedTags)
         {
             return new
             {
@@ -106,11 +107,13 @@ namespace Server.Controllers
                 HttpContext.Current.Request.Path,
                 HttpContext.Current.Request.RawUrl,
                 QueryString = HttpContext.Current.Request.QueryString
-                                               .ToPairs()
-                                               .ToDictionary(p => p.Key, p => p.Value),
+                                                 .ToPairs()
+                                                 .ToDictionary(p => p.Key, p => p.Value),
                 TagsBeforeExpansion = leppieWildcards.Count,
                 TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
-                TagsExpansionMilliseconds = elapsed.TotalMilliseconds.ToString("N2"),
+                TagsExpansionMilliseconds = tagsExpansionTime.TotalMilliseconds.ToString("N2"),
+                TotalTimeMilliseconds = totalTime.TotalMilliseconds.ToString("N2"),
+                RemainingTimeMilliseconds = (totalTime - tagsExpansionTime).TotalMilliseconds.ToString("N2"),
                 QuestionIds = result.Questions.Select(qu => qu.Id),
                 InvalidResults = GetInvalidResults(result.Questions, queryInfo.Tag, queryInfo.OtherTag, queryInfo.Type, queryInfo.Operator),
                 ShouldHaveBeenExcludedResults = GetShouldHaveBeenExcludedResults(result.Questions, queryInfo.Type, queryInfo.Operator, leppieExpandedTags)
