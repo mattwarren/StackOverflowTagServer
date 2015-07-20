@@ -94,7 +94,7 @@ namespace StackOverflowTagServer
                 }
             }
             nGramsTimer.Stop();
-            Console.WriteLine("\nTook {0} to create {1:N0} n-grams (ONE-OFF cost)\n", nGramsTimer.Elapsed, allNGrams.Count);
+            Console.WriteLine("\nTook {0} ({1:N2} ms) to create {2:N0} n-grams (ONE-OFF cost)\n", nGramsTimer.Elapsed, nGramsTimer.Elapsed.TotalMilliseconds, allNGrams.Count);
 
             return allNGrams;
         }
@@ -335,10 +335,6 @@ namespace StackOverflowTagServer
                     //                      tagMatch, tagPattern, String.Join(", ", searches));
                     //}
                 }
-            }
-            else
-            {
-                Trace.WriteLine(string.Format("ERROR: tagPattern {0} produces null expandedTagIds", tagPattern));
             }
             //expandTagsTimer.Stop();
 

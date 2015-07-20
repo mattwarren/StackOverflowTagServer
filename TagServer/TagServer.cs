@@ -1,14 +1,15 @@
 ﻿using ProtoBuf;
 using Shared;
 using StackOverflowTagServer.DataStructures;
+using StackOverflowTagServer.Querying;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
-using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.DataStructures.BitSet>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
+using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.DataStructures.BitSet>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 namespace StackOverflowTagServer
@@ -46,6 +47,8 @@ namespace StackOverflowTagServer
         private readonly TagByQueryLookupBitSet tagsByViewCountBitSet;
 
         private readonly QueryProcessor queryProcessor;
+
+        private readonly ComplexQueryProcessor complexQueryProcessor;
 
         public static TagServer CreateFromFile(string filename)
         {
@@ -162,12 +165,12 @@ namespace StackOverflowTagServer
                 var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
                 var tempLookup = DeserialiseFromDisk<TagByQueryLookup>(tagLookupFileName, intermediateFilesFolder);
                 intermediateLookups.Add(type, tempLookup);
-                Log("{0,20} contains {1:N0} Lookups", type, tempLookup.Count);
+                Log("{0,20} contains {1:N0} Tag Lookups", type, tempLookup.Count);
 
                 var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
                 var tempBitSet = DeserialiseFromDisk<TagByQueryLookupBitSet>(bitSetFileName, intermediateFilesFolder);
                 intermediateBitSets.Add(type, tempBitSet);
-                Log("{0,20} contains {1:N0} BitSets", type, tempBitSet.Count);
+                Log("{0,20} contains {1:N0} Tag BitSets", type, tempBitSet.Count);
             }
             // Now fetch from disk the AllTags Lookup, Tag -> Count (i.e. "C#" -> 579,321, "Java" -> 560,432)
             var allTags = DeserialiseFromDisk<TagLookup>(AllTagsFileName, intermediateFilesFolder);
@@ -187,6 +190,7 @@ namespace StackOverflowTagServer
         {
             questions = questionsList;
             queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
+            complexQueryProcessor = new ComplexQueryProcessor(questions, type => GetTagLookupForQueryType(type));
 
             var groupedTags = CreateTagGroupings();
             allTags = groupedTags.ToDictionary(t => t.Key, t => t.Value.Count);
@@ -223,14 +227,17 @@ namespace StackOverflowTagServer
         {
             questions = questionsList;
             queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
+            complexQueryProcessor = new ComplexQueryProcessor(questions, type => GetTagLookupForQueryType(type));
             this.allTags = allTags;
 
+            // These have to be initialised in the ctor, so they can remain readonly
             tagsByAnswerCount = intermediateLookups[QueryType.AnswerCount];
             tagsByCreationDate = intermediateLookups[QueryType.CreationDate];
             tagsByLastActivityDate = intermediateLookups[QueryType.LastActivityDate];
             tagsByScore = intermediateLookups[QueryType.Score];
             tagsByViewCount = intermediateLookups[QueryType.ViewCount];
 
+            // These have to be initialised in the ctor, so they can remain readonly
             tagsByAnswerCountBitSet = intermediateBitSets[QueryType.AnswerCount];
             tagsByCreationDateBitSet = intermediateBitSets[QueryType.CreationDate];
             tagsByLastActivityDateBitSet = intermediateBitSets[QueryType.LastActivityDate];
@@ -255,12 +262,12 @@ namespace StackOverflowTagServer
 
         public QueryResult ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0, CLR.HashSet<string> tagsToExclude = null)
         {
-            return queryProcessor.ComparisonQuery(type, tag1, tag2, @operator, pageSize, skip, tagsToExclude);
+            return complexQueryProcessor.Query(type, tag1, tag2, @operator, pageSize, skip, tagsToExclude);
         }
 
         public QueryResult ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0, CLR.HashSet<string> tagsToExclude = null)
         {
-            return queryProcessor.ComparisonQueryNoLINQ(type, tag1, tag2, @operator, pageSize, skip, tagsToExclude);
+            return complexQueryProcessor.QueryNoLINQ(type, tag1, tag2, @operator, pageSize, skip, tagsToExclude);
         }
 
         public List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)

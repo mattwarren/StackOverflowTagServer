@@ -1,7 +1,7 @@
 ﻿using Shared;
 using System.Collections.Generic;
 
-namespace StackOverflowTagServer
+namespace StackOverflowTagServer.Querying
 {
     public class QueryResult
     {

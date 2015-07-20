@@ -1,4 +1,5 @@
-﻿using System;
+﻿using StackOverflowTagServer.DataStructures;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -7,8 +8,23 @@ namespace StackOverflowTagServer
 {
     public static class Utils
     {
+        public static List<string> GetLeppieTagsFromResource()
+        {
+            var leppieTags = new List<string>();
+            var resourceStream = Utils.GetStream("leppie - excluded tags.txt");
+            if (resourceStream != null)
+            {
+                var fileStream = new StreamReader(resourceStream);
+                string line;
+                while ((line = fileStream.ReadLine()) != null)
+                    leppieTags.Add(line);
+                //Console.WriteLine(string.Join(", ", tagsToExpand));
+            }
+            return leppieTags;
+        }
+
         // From http://stackoverflow.com/questions/11590582/read-text-file-resource-from-net-library/11596483#11596483
-        public static Stream GetStream(string resourceName)
+        internal static Stream GetStream(string resourceName)
         {
             try
             {
@@ -30,19 +46,20 @@ namespace StackOverflowTagServer
             return Stream.Null;
         }
 
-        public static List<string> GetLeppieTagsFromResource()
+        internal static IDisposable SetConsoleColour(ConsoleColor newColour)
         {
-            var leppieTags = new List<string>();
-            var resourceStream = Utils.GetStream("leppie - excluded tags.txt");
-            if (resourceStream != null)
-            {
-                var fileStream = new StreamReader(resourceStream);
-                string line;
-                while ((line = fileStream.ReadLine()) != null)
-                    leppieTags.Add(line);
-                //Console.WriteLine(string.Join(", ", tagsToExpand));
-            }
-            return leppieTags;
+            var originalColour = Console.ForegroundColor;
+            Console.ForegroundColor = newColour;
+            return new DisposableAction(() => Console.ForegroundColor = originalColour);
+        }
+
+        internal static ConsoleColor GetColorForTimespan(TimeSpan elapsed)
+        {
+            if (elapsed.TotalMilliseconds > 500)
+                return ConsoleColor.Red;
+            else if (elapsed.TotalMilliseconds > 400)
+                return ConsoleColor.DarkYellow;
+            return Console.ForegroundColor;
         }
     }
 }

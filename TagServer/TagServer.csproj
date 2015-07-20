@@ -93,7 +93,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Querying\BaseQueryProcessor.cs" />
     <Compile Include="CLR\BitHelper.cs" />
+    <Compile Include="Querying\ComplexQueryProcessor.cs" />
     <Compile Include="DataStructures\BitSet.cs" />
     <Compile Include="DataStructures\DisposableAction.cs" />
     <Compile Include="CLR\HashHelpers.cs" />
@@ -110,14 +112,14 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <Compile Include="QueryProcessor.cs" />
+    <Compile Include="Querying\QueryProcessor.cs" />
     <Compile Include="DataStructures\QueryType.cs" />
     <Compile Include="DataStructures\SimpleBloomFilter.cs" />
     <Compile Include="DataStructures\TagInfo.cs" />
-    <Compile Include="QueryResult.cs" />
+    <Compile Include="Querying\QueryResult.cs" />
     <Compile Include="Results.cs" />
     <Compile Include="TagServer.cs" />
-    <Compile Include="QueryTester.cs" />
+    <Compile Include="Querying\QueryTester.cs" />
     <Compile Include="Utils.cs" />
     <Compile Include="Validator.cs" />
     <Compile Include="WildcardProcessor.cs" />

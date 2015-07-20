@@ -19,9 +19,6 @@ namespace Server.Controllers
 
             var timer = Stopwatch.StartNew();
             var initialWildcards = wildcards.Split(',').ToList();
-            Trace.WriteLine("WildcardsQueryString  = " + wildcards);
-            Trace.WriteLine("InitialWildcards = " + String.Join(" - ", initialWildcards));
-
             var allTags = WebApiApplication.TagServer.Value.AllTags;
             var nGrams = WebApiApplication.NGrams.Value;
             var expandedTags = WildcardProcessor.ExpandTagsNGrams(allTags, initialWildcards, nGrams);

@@ -1,13 +1,14 @@
 ﻿using Server.Infrastructure;
+using Shared;
 using StackOverflowTagServer;
 using StackOverflowTagServer.DataStructures;
+using StackOverflowTagServer.Querying;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Web;
 using System.Web.Http;
-using Shared;
-using System;
-using System.Collections.Generic;
 
 namespace Server.Controllers
 {
@@ -26,6 +27,7 @@ namespace Server.Controllers
             var @operator = QueryStringProcessor.GetString(queryStringPairs, "operator", "AND");
             var useLinq = QueryStringProcessor.GetBool(queryStringPairs, "useLinq", false);
             var useLeppieExclusions = QueryStringProcessor.GetBool(queryStringPairs, "leppieExclusions", false);
+            var debugMode = QueryStringProcessor.GetBool(queryStringPairs, "debugMode", false);
 
             // This timer must include everything!! (i.e processing the wildcards and doing the query!!)
             var timer = Stopwatch.StartNew();
@@ -50,15 +52,23 @@ namespace Server.Controllers
 
             timer.Stop();
 
-            return new
+            var jsonResults = new Dictionary<string, object>();
+            jsonResults.Add("Statistics", new
             {
-                Statistics = new {
-                    ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
-                    Count = result.Questions.Count,
-                    TotalQuestionsForTag = WebApiApplication.TagServer.Value.TotalCount(type, tag),
-                    Counters = result.Counters
+                ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
+                ResultCount = result.Questions.Count,
+                TotalQuestionsPerTag = new Dictionary<string, string>()
+                {
+                    { tag, WebApiApplication.TagServer.Value.TotalCount(type, tag).ToString("N0") },
+                    { otherTag, WebApiApplication.TagServer.Value.TotalCount(type, otherTag).ToString("N0") }
                 },
-                DEBUGGING = new {
+                Counters = result.Counters
+            });
+
+            if (debugMode)
+            {
+                jsonResults.Add("DEBUGGING", new
+                {
                     Tag = tag,
                     QueryType = type.ToString(),
                     PageSize = pageSize,
@@ -66,17 +76,20 @@ namespace Server.Controllers
                     HttpContext.Current.Request.Path,
                     HttpContext.Current.Request.RawUrl,
                     QueryString = HttpContext.Current.Request.QueryString
-                                            .ToPairs()
-                                            .ToDictionary(p => p.Key, p => p.Value),
+                                                .ToPairs()
+                                                .ToDictionary(p => p.Key, p => p.Value),
                     TagsBeforeExpansion = leppieWildcards.Count,
                     TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
                     TagsExpansionMilliseconds = tagExpansionTimer.Elapsed.TotalMilliseconds.ToString("N2"),
                     QuestionIds = result.Questions.Select(qu => qu.Id),
                     InvalidResults = GetInvalidResults(result.Questions, tag, otherTag, type, @operator),
                     ShouldHaveBeenExcludedResults = GetShouldHaveBeenExcludedResults(result.Questions, type, @operator, leppieExpandedTags)
-                },
-                Results = result.Questions,
-            };
+                });
+            }
+
+            jsonResults.Add("Results", result.Questions);
+
+            return jsonResults;
         }
 
         private List<Question> GetInvalidResults(List<Question> results, string tag, string otherTag, QueryType type, string @operator)
@@ -136,19 +149,23 @@ namespace Server.Controllers
             };
         }
 
-        [Route("api/Query/LeppieTags")]
+        [Route("api/Query/LeppieExpandedWildcards")]
         [HttpGet]
-        public object LeppieTags()
+        public object LeppieExpandedWildcards()
         {
             var allTags = WebApiApplication.TagServer.Value.AllTags;
             var leppieWildcards = WebApiApplication.LeppieWildcards.Value;
             var nGrams = WebApiApplication.NGrams.Value;
+            var timer = Stopwatch.StartNew();
             var expandedWildcards = WildcardProcessor.ExpandTagsNGrams(allTags, leppieWildcards, nGrams)
-                                                    .OrderBy(t => t)
-                                                    .ToList();
+                                                     .OrderBy(t => t)
+                                                     .ToList();
+            timer.Stop();
+
             return new
             {
-                Count = leppieWildcards.Count,
+                ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
+                CountBeforeExpansion = leppieWildcards.Count,
                 ExpandedCount = expandedWildcards.Count,
                 ExpandedWildcards = expandedWildcards
             };
