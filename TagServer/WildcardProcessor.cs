@@ -264,39 +264,40 @@ namespace StackOverflowTagServer
                     continue;
                 }
 
-                var createSearchTimer = Stopwatch.StartNew();
-                var searches = new List<string>();
-                var actualTag = String.Empty;
-                var firstChar = tagPattern[0];
-                var lastChar = tagPattern[tagPattern.Length - 1];
-                if (firstChar == '*' && lastChar == '*')
-                {
-                    // "anywhere" wildcard, i.e. "*foo*"
-                    actualTag = tagPattern.Substring(1, tagPattern.Length - 2);
-                    searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
-                }
-                else if (lastChar == '*')
-                {
-                    // "starts-with" or prefix search, i.e "foo*"
-                    actualTag = tagPattern.Substring(0, tagPattern.Length - 1);
-                    searches.Add(WordAnchor + actualTag.Substring(0, 2));
-                    searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
-                }
-                else if (firstChar == '*')
-                {
-                    // "end-with" or suffix search, i.e "*foo"
-                    actualTag = tagPattern.Substring(1, tagPattern.Length - 1);
-                    searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
-                    searches.Add(actualTag.Substring(tagPattern.Length - 3, 2) + WordAnchor);
-                }
-                createSearchTimer.Stop();
-                //if (searches.Any())
-                //    Console.WriteLine("Took {0} ({1,5:N0} ms), Tag: \"{2}\" ({3}) -> {4}", createSearchTimer.Elapsed,
-                //                  createSearchTimer.ElapsedMilliseconds, tagPattern, actualTag, String.Join(", ", searches));
-
+                var searches = CreateSearches(tagPattern);
                 var tagAdded = CollectPossibleNGramMatches(allTagsList, nGrams, searches, tagPattern, expandedTags);
             }
             return expandedTags;
+        }
+
+        public static List<string> CreateSearches(string tagPattern)
+        {
+            var searches = new List<string>();
+            var actualTag = String.Empty;
+            var firstChar = tagPattern[0];
+            var lastChar = tagPattern[tagPattern.Length - 1];
+            if (firstChar == '*' && lastChar == '*')
+            {
+                // "anywhere" wildcard, i.e. "*foo*"
+                actualTag = tagPattern.Substring(1, tagPattern.Length - 2);
+                searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
+            }
+            else if (lastChar == '*')
+            {
+                // "starts-with" or prefix search, i.e "foo*"
+                actualTag = tagPattern.Substring(0, tagPattern.Length - 1);
+                searches.Add(WordAnchor + actualTag.Substring(0, 2));
+                searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
+            }
+            else if (firstChar == '*')
+            {
+                // "end-with" or suffix search, i.e "*foo"
+                actualTag = tagPattern.Substring(1, tagPattern.Length - 1);
+                searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
+                searches.Add(actualTag.Substring(tagPattern.Length - 3, 2) + WordAnchor);
+            }
+
+            return searches;
         }
 
         private static bool CollectPossibleNGramMatches(
@@ -319,20 +320,28 @@ namespace StackOverflowTagServer
 
             var tagsAdded = 0;
             var rawTagPattern = tagPattern.Replace("*", "");
-            foreach (var tagMatch in expandedTagIds.Select(expandedTagId => allTagsList[expandedTagId]))
+            if (expandedTagIds != null)
             {
-                if (IsActualMatch(tagMatch, tagPattern, rawTagPattern))
+                foreach (var tagMatch in expandedTagIds.Select(expandedTagId => allTagsList[expandedTagId]))
                 {
-                    expandedTags.Add(tagMatch);
-                    tagsAdded++;
+                    if (IsActualMatch(tagMatch, tagPattern, rawTagPattern))
+                    {
+                        expandedTags.Add(tagMatch);
+                        tagsAdded++;
+                    }
+                    //else
+                    //{
+                    //    Console.WriteLine("False Positive, Tag: {0}, TagPattern: {1}, Searches: {2}",
+                    //                      tagMatch, tagPattern, String.Join(", ", searches));
+                    //}
                 }
-                //else
-                //{
-                //    Console.WriteLine("False Positive, Tag: {0}, TagPattern: {1}, Searches: {2}",
-                //                      tagMatch, tagPattern, String.Join(", ", searches));
-                //}
+            }
+            else
+            {
+                Trace.WriteLine(string.Format("ERROR: tagPattern {0} produces null expandedTagIds", tagPattern));
             }
             //expandTagsTimer.Stop();
+
             //Console.WriteLine("Took {0} ({1,5:N0} ms) in TOTAL, to expand to \"{2}\" to {3} Tags ({4} in total):",
             //                  expandTagsTimer.Elapsed, expandTagsTimer.ElapsedMilliseconds, tagPattern, tagsAdded, expandedTags.Count);
             //Console.WriteLine(String.Join(", ", expandedTags));
@@ -462,8 +471,8 @@ namespace StackOverflowTagServer
 
         private static bool IsActualMatch(string tagMatch, string tagPattern, string rawTagPattern)
         {
-            // TODO this only works if '*' can only be at the front/end/both, i.e. '*foo', 'foo*' or '*foo*'
-            // if wildcards '*' are allowed elsewhere, have to make it more complex!
+            // NOTE this ONLY works if '*' can only be at the front/end/both, i.e. '*foo', 'foo*' or '*foo*'
+            // if wildcards '*' are allowed elsewhere (i.e. 'fo*o'), we have to make it more complex!
             var firstChar = tagPattern[0];
             var lastChar = tagPattern[tagPattern.Length - 1];
             if (firstChar == '*' && lastChar == '*')
