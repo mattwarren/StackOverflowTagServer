@@ -50,24 +50,9 @@ namespace StackOverflowTagServer
 
         private readonly ComplexQueryProcessor complexQueryProcessor;
 
-        public static TagServer CreateFromFile(string filename)
-        {
-            List<Question> rawQuestions;
-            var fileReadTimer = Stopwatch.StartNew();
-            using (var file = File.OpenRead(filename))
-            {
-                rawQuestions = Serializer.Deserialize<List<Question>>(file);
-            }
-            fileReadTimer.Stop();
-
-            GC.Collect(2, GCCollectionMode.Forced);
-            var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            var tagServer = new TagServer(rawQuestions);
-            TagServer.Log("Took {0} ({1:N0} ms) to DE-serialise {2:N0} Stack Overflow Questions from the file - Using {3:N2} MB ({4:NB} GB) of memory\n",
-                                fileReadTimer.Elapsed, fileReadTimer.Elapsed.TotalMilliseconds, rawQuestions.Count, memoryUsed, memoryUsed / 1024.0);
-            return tagServer;
-        }
-
+        /// <summary>
+        /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor <see cref="TagServer(List{Question})"></see>
+        /// </summary>
         public static TagServer CreateFromScratchAndSaveToDisk(List<Question> rawQuestions, string intermediateFilesFolder)
         {
             var tagServer = new TagServer(rawQuestions);
@@ -90,6 +75,45 @@ namespace StackOverflowTagServer
             return tagServer;
         }
 
+        /// <summary>
+        /// Private constructor that is used when creating the Tag Server from SCRATCH (<see cref="CreateFromScratchAndSaveToDisk"></see>)
+        /// </summary>
+        /// <param name="questionsList"></param>
+        private TagServer(List<Question> questionsList)
+        {
+            questions = questionsList;
+            queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
+            complexQueryProcessor = new ComplexQueryProcessor(questions, type => GetTagLookupForQueryType(type));
+
+            var groupedTags = CreateTagGroupings();
+            allTags = groupedTags.ToDictionary(t => t.Key, t => t.Value.Count);
+
+            // These have to be initialised in the ctor, so they can remain readonly
+            tagsByAnswerCount = new TagByQueryLookup(groupedTags.Count);
+            tagsByCreationDate = new TagByQueryLookup(groupedTags.Count);
+            tagsByLastActivityDate = new TagByQueryLookup(groupedTags.Count);
+            tagsByScore = new TagByQueryLookup(groupedTags.Count);
+            tagsByViewCount = new TagByQueryLookup(groupedTags.Count);
+
+            // These have to be initialised in the ctor, so they can remain readonly
+            tagsByAnswerCountBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
+            tagsByCreationDateBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
+            tagsByLastActivityDateBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
+            tagsByScoreBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
+            tagsByViewCountBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
+
+            CreateSortedLists(groupedTags, useAlternativeMethod: true);
+
+            CreateBitSets(groupedTags);
+
+            //ValidateTagOrdering();
+            //ValidateBitSetOrdering();
+
+            GC.Collect(2, GCCollectionMode.Forced);
+            var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            Log("After TagServer created - Using {0:N2} MB ({1:N2} GB) of memory in total\n", mbUsed, mbUsed / 1024.0);
+        }
+
         public static List<Question> GetRawQuestionsFromDisk(string folder, string filename)
         {
             List<Question> rawQuestions;
@@ -103,13 +127,92 @@ namespace StackOverflowTagServer
 
             GC.Collect(2, GCCollectionMode.Forced);
             var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Console.WriteLine("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from disk - Using {2:N2} MB ({3:N2} GB) of memory\n",
-                                fileReadTimer.Elapsed, rawQuestions.Count, memoryUsed, memoryUsed / 1024.0);
+            Log("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from disk - Using {2:N2} MB ({3:N2} GB) of memory\n",
+                fileReadTimer.Elapsed, rawQuestions.Count, memoryUsed, memoryUsed / 1024.0);
 
             return rawQuestions;
         }
 
-        public static void TestBitSets(string intermediateFilesFolder)
+        /// <summary>
+        /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor
+        /// <see cref="TagServer(List{Question}, TagLookup, Dictionary{QueryType, TagByQueryLookup}, Dictionary{QueryType, TagByQueryLookupBitSet})"></see>
+        /// </summary>
+        public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder, bool deserialiseBitSets = true)
+        {
+            var deserializeTimer = Stopwatch.StartNew();
+            Log("Deserialisation folder: {0}", intermediateFilesFolder);
+            var queryTypes = (QueryType[])Enum.GetValues(typeof(QueryType));
+            var intermediateLookups = new Dictionary<QueryType, TagByQueryLookup>(queryTypes.Length);
+            var intermediateBitSets = new Dictionary<QueryType, TagByQueryLookupBitSet>(queryTypes.Length);
+            foreach (QueryType type in queryTypes)
+            {
+                var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
+                var tempLookup = DeserialiseFromDisk<TagByQueryLookup>(tagLookupFileName, intermediateFilesFolder);
+                intermediateLookups.Add(type, tempLookup);
+                Log("{0,20} contains {1:N0} Tag Lookups", type, tempLookup.Count);
+
+                if (deserialiseBitSets)
+                {
+                    var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
+                    var tempBitSet = DeserialiseFromDisk<TagByQueryLookupBitSet>(bitSetFileName, intermediateFilesFolder);
+                    intermediateBitSets.Add(type, tempBitSet);
+                    Log("{0,20} contains {1:N0} Tag BitSets", type, tempBitSet.Count);
+                }
+                else
+                {
+                    intermediateBitSets.Add(type, new TagByQueryLookupBitSet());
+                }
+            }
+            // Now fetch from disk the AllTags Lookup, Tag -> Count (i.e. "C#" -> 579,321, "Java" -> 560,432)
+            var allTags = DeserialiseFromDisk<TagLookup>(AllTagsFileName, intermediateFilesFolder);
+            deserializeTimer.Stop();
+            Log("\nTook {0} (in TOTAL) to DE-serialise the intermediate data FROM disk\n", deserializeTimer.Elapsed);
+
+            return new TagServer(rawQuestions, allTags, intermediateLookups, intermediateBitSets);
+        }
+
+        /// <summary>
+        /// Private constructor that is used when creating the Tag Server from previously serialised data (<see cref="CreateFromSerialisedData"></see>)
+        /// </summary>
+        private TagServer(List<Question> questionsList, TagLookup allTags,
+                          Dictionary<QueryType, TagByQueryLookup> intermediateLookups,
+                          Dictionary<QueryType, TagByQueryLookupBitSet> intermediateBitSets)
+        {
+            questions = questionsList;
+            queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
+            complexQueryProcessor = new ComplexQueryProcessor(questions, type => GetTagLookupForQueryType(type));
+            this.allTags = allTags;
+
+            // These have to be initialised in the ctor, so they can remain readonly
+            tagsByAnswerCount = intermediateLookups[QueryType.AnswerCount];
+            tagsByCreationDate = intermediateLookups[QueryType.CreationDate];
+            tagsByLastActivityDate = intermediateLookups[QueryType.LastActivityDate];
+            tagsByScore = intermediateLookups[QueryType.Score];
+            tagsByViewCount = intermediateLookups[QueryType.ViewCount];
+
+            // These have to be initialised in the ctor, so they can remain readonly
+            tagsByAnswerCountBitSet = intermediateBitSets[QueryType.AnswerCount];
+            tagsByCreationDateBitSet = intermediateBitSets[QueryType.CreationDate];
+            tagsByLastActivityDateBitSet = intermediateBitSets[QueryType.LastActivityDate];
+            tagsByScoreBitSet = intermediateBitSets[QueryType.Score];
+            tagsByViewCountBitSet = intermediateBitSets[QueryType.ViewCount];
+
+            // This takes a while, maybe don't do it when using Intermediate results (that have already has this check?)
+            //ValidateTagOrdering();
+            //ValidateBitSetOrdering();
+
+            GC.Collect(2, GCCollectionMode.Forced);
+            var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            Log("After TagServer created - Using {0:N2} MB ({1:N2} GB) of memory in total\n", mbUsed, mbUsed / 1024.0);
+        }
+
+        public int TotalCount(QueryType type, string tag)
+        {
+            TagByQueryLookup queryInfo = GetTagLookupForQueryType(type);
+            return queryInfo[tag].Length;
+        }
+
+        internal static void TestBitSets(string intermediateFilesFolder)
         {
             var memoryUsageBefore = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             var size = BitSet.ToIntArrayLength(8000000);
@@ -153,104 +256,41 @@ namespace StackOverflowTagServer
             var temp = fileSize + 1;
         }
 
-        public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder)
+        internal void TestBitSetsOnDeserialisedQuestionData()
         {
-            var deserializeTimer = Stopwatch.StartNew();
-            Log("Deserialisation folder: {0}", intermediateFilesFolder);
-            var queryTypes = (QueryType[])Enum.GetValues(typeof(QueryType));
-            var intermediateLookups = new Dictionary<QueryType, TagByQueryLookup>(queryTypes.Length);
-            var intermediateBitSets = new Dictionary<QueryType, TagByQueryLookupBitSet>(queryTypes.Length);
-            foreach (QueryType type in queryTypes)
-            {
-                var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
-                var tempLookup = DeserialiseFromDisk<TagByQueryLookup>(tagLookupFileName, intermediateFilesFolder);
-                intermediateLookups.Add(type, tempLookup);
-                Log("{0,20} contains {1:N0} Tag Lookups", type, tempLookup.Count);
+            var bitSetTimer = Stopwatch.StartNew();
+            var byAnswerCount = GetTagBitSetForQueryType(QueryType.AnswerCount);
+            var cSharp = byAnswerCount["c#"];
+            var jQuery = byAnswerCount["jquery"];
+            var takeValue = 3; // 10; // for hex
+            var skipValue = 5;
+            string formatString = "X8", spacer = " ";
 
-                var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
-                var tempBitSet = DeserialiseFromDisk<TagByQueryLookupBitSet>(bitSetFileName, intermediateFilesFolder);
-                intermediateBitSets.Add(type, tempBitSet);
-                Log("{0,20} contains {1:N0} Tag BitSets", type, tempBitSet.Count);
-            }
-            // Now fetch from disk the AllTags Lookup, Tag -> Count (i.e. "C#" -> 579,321, "Java" -> 560,432)
-            var allTags = DeserialiseFromDisk<TagLookup>(AllTagsFileName, intermediateFilesFolder);
-            deserializeTimer.Stop();
-            Log("\nTook {0} (in TOTAL) to DE-serialise the intermediate data FROM disk\n", deserializeTimer.Elapsed);
+            //Console.WriteLine("cSharp:        {0}",
+            //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+            //                  String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+            //Console.WriteLine("jQuery:        {0}",
+            //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+            //                  String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
 
-            return new TagServer(rawQuestions, allTags, intermediateLookups, intermediateBitSets);
-        }
+            jQuery.Not(); // Edits in-place, for real queries we NEED to make a copy
+                          //Console.WriteLine("NOT jQuery:    {0}",
+                          //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+                          //                  String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
 
-        public int TotalCount(QueryType type, string tag)
-        {
-            TagByQueryLookup queryInfo = GetTagLookupForQueryType(type);
-            return queryInfo[tag].Length;
-        }
+            cSharp.Or(jQuery); // Edits in-place, for real queries we NEED to make a copy
+                               //Console.WriteLine("cSharp OR (NOT jQuery)");
 
-        private TagServer(List<Question> questionsList)
-        {
-            questions = questionsList;
-            queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
-            complexQueryProcessor = new ComplexQueryProcessor(questions, type => GetTagLookupForQueryType(type));
+            //cSharp.And(jQuery); // Edits in-place, for real queries we NEED to make a copy
+            //Console.WriteLine("cSharp AND (NOT jQuery)");
 
-            var groupedTags = CreateTagGroupings();
-            allTags = groupedTags.ToDictionary(t => t.Key, t => t.Value.Count);
+            //Console.WriteLine("cSharp Result: {0}",
+            //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+            //                  String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
 
-            // These have to be initialised in the ctor, so they can remain readonly
-            tagsByAnswerCount = new TagByQueryLookup(groupedTags.Count);
-            tagsByCreationDate = new TagByQueryLookup(groupedTags.Count);
-            tagsByLastActivityDate = new TagByQueryLookup(groupedTags.Count);
-            tagsByScore = new TagByQueryLookup(groupedTags.Count);
-            tagsByViewCount = new TagByQueryLookup(groupedTags.Count);
+            bitSetTimer.Stop();
 
-            // These have to be initialised in the ctor, so they can remain readonly
-            tagsByAnswerCountBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-            tagsByCreationDateBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-            tagsByLastActivityDateBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-            tagsByScoreBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-            tagsByViewCountBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-
-            CreateSortedLists(groupedTags, useAlternativeMethod: true);
-
-            CreateBitSets(groupedTags);
-
-            //ValidateTagOrdering();
-            //ValidateBitSetOrdering();
-
-            GC.Collect(2, GCCollectionMode.Forced);
-            var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Log("After TagServer created - Using {0:N2} MB ({1:N2} GB) of memory in total\n", mbUsed, mbUsed / 1024.0);
-        }
-
-        private TagServer(List<Question> questionsList, TagLookup allTags,
-                          Dictionary<QueryType, TagByQueryLookup> intermediateLookups,
-                          Dictionary<QueryType, TagByQueryLookupBitSet> intermediateBitSets)
-        {
-            questions = questionsList;
-            queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
-            complexQueryProcessor = new ComplexQueryProcessor(questions, type => GetTagLookupForQueryType(type));
-            this.allTags = allTags;
-
-            // These have to be initialised in the ctor, so they can remain readonly
-            tagsByAnswerCount = intermediateLookups[QueryType.AnswerCount];
-            tagsByCreationDate = intermediateLookups[QueryType.CreationDate];
-            tagsByLastActivityDate = intermediateLookups[QueryType.LastActivityDate];
-            tagsByScore = intermediateLookups[QueryType.Score];
-            tagsByViewCount = intermediateLookups[QueryType.ViewCount];
-
-            // These have to be initialised in the ctor, so they can remain readonly
-            tagsByAnswerCountBitSet = intermediateBitSets[QueryType.AnswerCount];
-            tagsByCreationDateBitSet = intermediateBitSets[QueryType.CreationDate];
-            tagsByLastActivityDateBitSet = intermediateBitSets[QueryType.LastActivityDate];
-            tagsByScoreBitSet = intermediateBitSets[QueryType.Score];
-            tagsByViewCountBitSet = intermediateBitSets[QueryType.ViewCount];
-
-            // This takes a while, maybe don't do it when using Intermediate results (that have already has this check?)
-            //ValidateTagOrdering();
-            //ValidateBitSetOrdering();
-
-            GC.Collect(2, GCCollectionMode.Forced);
-            var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Log("After TagServer created - Using {0:N2} MB ({1:N2} GB) of memory in total\n", mbUsed, mbUsed / 1024.0);
+            Log("Took {0} ({1:N0} ms) to do C# Or (Not jQuery)\n", bitSetTimer.Elapsed, bitSetTimer.ElapsedMilliseconds);
         }
 
 #region QueryApiPassedThruToQueryProcessor
@@ -260,14 +300,14 @@ namespace StackOverflowTagServer
             return queryProcessor.Query(type, tag, pageSize, skip);
         }
 
-        public QueryResult ComparisonQuery(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0, CLR.HashSet<string> tagsToExclude = null)
+        public QueryResult ComparisonQuery(QueryInfo info, CLR.HashSet<string> tagsToExclude = null)
         {
-            return complexQueryProcessor.Query(type, tag1, tag2, @operator, pageSize, skip, tagsToExclude);
+            return complexQueryProcessor.Query(info, tagsToExclude);
         }
 
-        public QueryResult ComparisonQueryNoLINQ(QueryType type, string tag1, string tag2, string @operator, int pageSize = 50, int skip = 0, CLR.HashSet<string> tagsToExclude = null)
+        public QueryResult ComparisonQueryNoLINQ(QueryInfo info, CLR.HashSet<string> tagsToExclude = null)
         {
-            return complexQueryProcessor.QueryNoLINQ(type, tag1, tag2, @operator, pageSize, skip, tagsToExclude);
+            return complexQueryProcessor.QueryNoLINQ(info, tagsToExclude);
         }
 
         public List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)

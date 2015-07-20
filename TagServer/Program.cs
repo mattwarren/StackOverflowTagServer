@@ -7,9 +7,9 @@ using System.Linq;
 using System.Runtime;
 
 using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
-//using HashSet = System.Collections.Generic.HashSet<string>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
+using StackOverflowTagServer.Querying;
 
 // ReSharper disable LocalizableElement
 namespace StackOverflowTagServer
@@ -22,8 +22,8 @@ namespace StackOverflowTagServer
 
             var folder = @"C:\Users\warma11\Downloads\__GitHub__\StackOverflowTagServer\BinaryData\";
             var filename = @"Questions-NEW.bin";
-            //var filename = @"Questions-subset.bin";
 
+            // This test doesn't need any "real" data (questions, tags, etc), so we can run it straight away"
             //TagServer.TestBitSets(folder);
             //return;
 
@@ -31,10 +31,14 @@ namespace StackOverflowTagServer
             var rawQuestions = TagServer.GetRawQuestionsFromDisk(folder, filename);
 
             //TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
-            TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
+            //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
+            TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder, deserialiseBitSets: false);
 
-            //PrintQuestionStats(rawQuestions);
-            //PrintTagStats(tagServer.AllTags);
+            // we can't do this if "deserialiseBitSets: false" is used above
+            //tagServer.TestBitSetsOnDeserialisedQuestionData();
+
+            PrintQuestionStats(rawQuestions);
+            PrintTagStats(tagServer.AllTags);
 
             startupTimer.Stop();
 
@@ -43,10 +47,8 @@ namespace StackOverflowTagServer
             Console.WriteLine("Took {0} ({1:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL",
                               startupTimer.Elapsed, startupTimer.Elapsed.TotalMilliseconds, totalMemory, totalMemory / 1024.0);
 
+            RunComparisonQueries(tagServer);
             return;
-
-            //RunComparisonQueries(tagServer);
-            //return;
 
             Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);
             NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags, N: 3);
@@ -56,9 +58,9 @@ namespace StackOverflowTagServer
             var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
 
             // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
-            GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
+            //GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
 
-            RunExclusionQueryTests(tagServer, leppieExpandedTags, runsPerLoop: 10);
+            //RunExclusionQueryTests(tagServer, leppieExpandedTags, runsPerLoop: 10);
 
             //RunSimpleQueries();
 
@@ -148,6 +150,69 @@ namespace StackOverflowTagServer
             return expandedTags;
         }
 
+        private static void RunComparisonQueries(TagServer tagServer)
+        {
+            var smallTag = tagServer.AllTags.Where(t => t.Value <= 200).First().Key;
+            string largeTag = ".net";
+            int pageSize = 25;
+
+            // LARGE 1st Tag, SMALL 2nd Tag
+            RunAndOrNotComparisionQueries(tagServer, tag1: largeTag, tag2: smallTag, pageSize: pageSize);
+            // SMALL 1st Tag, LARGE 2nd Tag
+            RunAndOrNotComparisionQueries(tagServer, tag1: smallTag, tag2: largeTag, pageSize: pageSize);
+
+            // 2 large tags (probably the worst case)
+            RunAndOrNotComparisionQueries(tagServer, "c#", "jquery", pageSize);
+        }
+
+        private static void RunAndOrNotComparisionQueries(TagServer tagServer, string tag1, string tag2, int pageSize)
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\nComparison queries:\n\t\"{0}\" has {1:N0} questions\n\t\"{2}\" has {3:N0} questions",
+                              tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
+            Console.ResetColor();
+
+            var queries = new[] { "AND", "OR", "NOT", "OR-NOT" };
+            var skipCounts = new[] { 0, 100, 250, 500, 1000, 2000, 4000, 8000 };
+            foreach (var query in queries)
+            {
+                Results.CreateNewFile(string.Format("Results-{0}-{1}-{2}-{3}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss"), tag1, query, tag2));
+                Results.AddHeaders("Skip Count", "Regular", "Regular", "Regular", "No LINQ", "No LINQ", "No LINQ");
+
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("\n{0} Comparison queries: {1} {0} {2}\n", query, tag1, tag2);
+                Console.ResetColor();
+                foreach (var skipCount in skipCounts)
+                {
+                    Results.AddData(skipCount.ToString());
+                    Console.ForegroundColor = ConsoleColor.DarkGreen;
+                    var info = new QueryInfo { Type = QueryType.ViewCount, Tag = tag1, OtherTag = tag2, Operator = query, PageSize = pageSize, Skip = skipCount };
+                    var result1 = tagServer.ComparisonQuery(info);
+                    info.Tag = tag2; info.OtherTag = tag1; // reverse the 2 tags
+                    var result2 = tagServer.ComparisonQuery(info);
+                    info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
+                    var result3 = tagServer.ComparisonQuery(info);
+
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
+                    var result4 = tagServer.ComparisonQueryNoLINQ(info);
+                    info.Tag = tag2; info.OtherTag = tag1; // reverse the 2 tags
+                    var result5 = tagServer.ComparisonQueryNoLINQ(info);
+                    info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
+                    var result6 = tagServer.ComparisonQueryNoLINQ(info);
+
+                    CompareLists(result1.Questions, "Regular", result4.Questions, "No LINQ");
+                    CompareLists(result2.Questions, "Regular", result5.Questions, "No LINQ");
+                    CompareLists(result3.Questions, "Regular", result6.Questions, "No LINQ");
+
+                    Console.ResetColor();
+                    Results.StartNewRow();
+                }
+
+                Results.CloseFile();
+            }
+        }
+
         private static void RunExclusionQueryTests(TagServer tagServer, HashSet expandedTags, int runsPerLoop)
         {
             Results.CreateNewFile(string.Format("Results-Exclusion-Queries-{0}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss")));
@@ -209,71 +274,6 @@ namespace StackOverflowTagServer
             //return;
 
             Results.CloseFile();
-        }
-
-        private static void RunComparisonQueries(TagServer tagServer)
-        {
-            var smallTag = tagServer.AllTags.Where(t => t.Value <= 200).First().Key;
-            string largeTag = ".net";
-            int pageSize = 25;
-
-            // LARGE 1st Tag, SMALL 2nd Tag
-            //RunAndOrNotComparisionQueries(tagServer, tag1: largeTag, tag2: smallTag, pageSize: pageSize);
-            // SMALL 1st Tag, LARGE 2nd Tag
-            //RunAndOrNotComparisionQueries(tagServer, tag1: smallTag, tag2: largeTag, pageSize: pageSize);
-
-            // 2 large tags (probably the worst case)
-            RunAndOrNotComparisionQueries(tagServer, "c#", "jquery", pageSize);
-        }
-
-        private static void RunAndOrNotComparisionQueries(TagServer tagServer, string tag1, string tag2, int pageSize)
-        {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\nComparison queries:\n\t\"{0}\" has {1:N0} questions\n\t\"{2}\" has {3:N0} questions",
-                              tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
-            Console.ResetColor();
-
-            var queries = new[] { "AND", "OR", "NOT", "OR-NOT" };
-            //var queries = new[] { "OR-NOT" };
-
-            var skipCounts = new[] { 0, 100, 250, 500, 1000, 2000, 4000, 8000 };
-            foreach (var query in queries)
-            {
-                Results.CreateNewFile(string.Format("Results-{0}-{1}-{2}-{3}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss"), tag1, query, tag2));
-                Results.AddHeaders("Skip Count", "Regular", "Regular", "Regular", "No LINQ", "No LINQ", "No LINQ");
-
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("\n{0} Comparison queries: {1} {0} {2}\n", query, tag1, tag2);
-                Console.ResetColor();
-                foreach (var skipCount in skipCounts)
-                {
-                    Results.AddData(skipCount.ToString());
-                    Console.ForegroundColor = ConsoleColor.DarkGreen;
-                    var result1 = tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
-                    var result2 = tagServer.ComparisonQuery(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
-                    var result3 = tagServer.ComparisonQuery(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
-
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    var result4 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
-                    var result5 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
-                    var result6 = tagServer.ComparisonQueryNoLINQ(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
-
-                    CompareLists(result1.Questions, "Regular", result4.Questions, "No LINQ");
-                    CompareLists(result2.Questions, "Regular", result5.Questions, "No LINQ");
-                    CompareLists(result3.Questions, "Regular", result6.Questions, "No LINQ");
-
-                    //Console.ForegroundColor = ConsoleColor.DarkYellow;
-                    //var result7 = tagServer.ComparisonQueryAdv(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
-                    //var result8 = tagServer.ComparisonQueryAdv(QueryType.Score, tag2, tag1, query, pageSize: pageSize, skip: skipCount);
-                    //var result9 = tagServer.ComparisonQueryAdv(QueryType.Score, tag1, tag2, query, pageSize: pageSize, skip: skipCount);
-
-                    Console.ResetColor();
-
-                    Results.StartNewRow();
-                }
-
-                Results.CloseFile();
-            }
         }
 
         private static void RunSimpleQueries()

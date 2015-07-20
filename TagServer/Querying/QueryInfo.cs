@@ -4,6 +4,18 @@ namespace StackOverflowTagServer.Querying
 {
     public class QueryInfo
     {
+        public QueryInfo()
+        {
+            // Set some sensible defaults
+            PageSize = 25;
+            Skip = 0;
+            Operator = "AND";
+
+            UseLinq = false;
+            UseLeppieExclusions = false;
+            DebugMode = false;
+    }
+
         public QueryType Type { get; set; }
         public int PageSize { get; set; }
         public int Skip { get; set; }
