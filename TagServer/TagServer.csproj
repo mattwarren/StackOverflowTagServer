@@ -93,6 +93,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DataStructures\AbstractBitSet.cs" />
+    <Compile Include="DataStructures\CompressedBitSet.cs" />
     <Compile Include="Querying\BaseQueryProcessor.cs" />
     <Compile Include="CLR\BitHelper.cs" />
     <Compile Include="Querying\ComplexQueryProcessor.cs" />

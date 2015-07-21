@@ -14,6 +14,7 @@ namespace StackOverflowTagServer.DataStructures
     /// USAGE:
     /// Suppose you need to represent a bit array of length (i.e. logical bit array length)
     /// BIT_ARRAY_LENGTH. Then this is the suggested way to instantiate BitSet:
+    /// <code>
     /// ***************************************************************************
     /// int intArrayLength = BitSet.ToIntArrayLength(BIT_ARRAY_LENGTH);
     /// BitSet bitSet;
@@ -24,7 +25,7 @@ namespace StackOverflowTagServer.DataStructures
     ///     int[] m_arrayPtr = new int[intArrayLength];
     ///     bitSet = new BitSet(m_arrayPtr, intArrayLength);
     /// ***************************************************************************
-    ///
+    /// </code>
     /// IMPORTANT:
     /// The second ctor args, length, should be specified as the length of the int array, not
     /// the logical bit array. Because length is used for bounds checking into the int array,
@@ -34,10 +35,9 @@ namespace StackOverflowTagServer.DataStructures
     /// The length ctor argument is the only exception; for other methods -- MarkBit and
     /// IsMarked -- pass in values as indices into the logical bit array, and it will be mapped
     /// to the position within the array of ints.
-    ///
-
+    /// </summary>
     [ProtoContract(UseProtoMembersOnly = true, SkipConstructor = true)]
-    unsafe internal class BitSet
+    internal class BitSet : AbstractBitSet
     {
         private const byte MarkedBitFlag = 1;
         private const byte IntSize = 32;
@@ -48,9 +48,7 @@ namespace StackOverflowTagServer.DataStructures
 
         // IsPacked means that ProtoBuf drasticially reduces the amount of disk space needed, for more info see
         // http://stackoverflow.com/questions/5211959/wasted-bytes-in-protocol-buffer-arrays/5214156#5214156
-        //[ProtoMember(2)]
         [ProtoMember(2, IsPacked = true)]
-        // array of ints
         private int[] m_array;
 
         internal int[] InternalArray {  get { return m_array; } }
@@ -60,18 +58,17 @@ namespace StackOverflowTagServer.DataStructures
         /// </summary>
         /// <param name="bitArray">int array to hold bits</param>
         /// <param name="length">length of int array</param>
-        internal BitSet(int[] bitArray, int length)
+        internal BitSet(int[] bitArray)
         {
             m_array = bitArray;
-            m_length = length;
+            m_length = bitArray.Length;
         }
 
         /// <summary>
         /// Mark bit at specified position
         /// </summary>
         /// <param name="bitPosition"></param>
-        [System.Security.SecuritySafeCritical]
-        internal unsafe void MarkBit(int bitPosition)
+        internal override void MarkBit(int bitPosition)
         {
             int bitArrayIndex = bitPosition / IntSize;
             if (bitArrayIndex < m_length && bitArrayIndex >= 0)
@@ -80,7 +77,26 @@ namespace StackOverflowTagServer.DataStructures
             }
             else
             {
-                var msg = string.Format("Must be less than {0}, but was {1} (bitPosition:{2})", m_length, bitArrayIndex, bitPosition);
+                var msg = string.Format("Must be less than {0:N0}, but was {1:N0} (bitPosition: {2:N0})", m_length, bitArrayIndex, bitPosition);
+                throw new ArgumentOutOfRangeException("bitPosition", msg);
+            }
+        }
+
+        /// <summary>
+        /// Clears the bit as the specified position
+        /// </summary>
+        /// <param name="bitPosition"></param>
+        internal void ClearBit(int bitPosition)
+        {
+            int bitArrayIndex = bitPosition / IntSize;
+            if (bitArrayIndex < m_length && bitArrayIndex >= 0)
+            {
+                // See http://stackoverflow.com/questions/8557105/how-to-unset-a-specific-bit-in-an-integer/8557639#8557639
+                m_array[bitArrayIndex] &= ~(MarkedBitFlag << (bitPosition % IntSize));
+            }
+            else
+            {
+                var msg = string.Format("Must be less than {0:N0}, but was {1:N0} (bitPosition: {2:N0})", m_length, bitArrayIndex, bitPosition);
                 throw new ArgumentOutOfRangeException("bitPosition", msg);
             }
         }
@@ -90,8 +106,7 @@ namespace StackOverflowTagServer.DataStructures
         /// </summary>
         /// <param name="bitPosition"></param>
         /// <returns></returns>
-        [System.Security.SecuritySafeCritical]
-        internal unsafe bool IsMarked(int bitPosition)
+        internal override bool IsMarked(int bitPosition)
         {
             int bitArrayIndex = bitPosition / IntSize;
             if (bitArrayIndex < m_length && bitArrayIndex >= 0)
@@ -100,7 +115,7 @@ namespace StackOverflowTagServer.DataStructures
             }
             else
             {
-                var msg = string.Format("Must be less than {0}, but was {1} (bitPosition:{2})", m_length, bitArrayIndex, bitPosition);
+                var msg = string.Format("Must be less than {0:N0}, but was {1:N0} (bitPosition: {2:N0})", m_length, bitArrayIndex, bitPosition);
                 throw new ArgumentOutOfRangeException("bitPosition", msg);
             }
         }
@@ -114,7 +129,7 @@ namespace StackOverflowTagServer.DataStructures
             if (value == null)
                 throw new ArgumentNullException("value");
             if (m_length != value.m_length)
-                throw new ArgumentException(string.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
+                throw new ArgumentException(string.Format("Array lengths differ, this: {0}, value: {1}", m_length, value.m_length));
 
             for (int i = 0; i < m_array.Length; i++)
             {
@@ -133,7 +148,7 @@ namespace StackOverflowTagServer.DataStructures
             if (value == null)
                 throw new ArgumentNullException("value");
             if (m_length != value.m_length)
-                throw new ArgumentException(string.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
+                throw new ArgumentException(string.Format("Array lengths differ, this: {0}, value: {1}", m_length, value.m_length));
 
             for (int i = 0; i < m_array.Length; i++)
             {
@@ -152,7 +167,7 @@ namespace StackOverflowTagServer.DataStructures
             if (value == null)
                 throw new ArgumentNullException("value");
             if (m_length != value.m_length)
-                throw new ArgumentException(string.Format("Array length differ, this: {0}, value: {1}", m_length, value.m_length));
+                throw new ArgumentException(string.Format("Array lengths differ, this: {0}, value: {1}", m_length, value.m_length));
 
             for (int i = 0; i < m_array.Length; i++)
             {

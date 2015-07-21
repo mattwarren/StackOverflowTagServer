@@ -9,7 +9,7 @@ using System.IO;
 using System.Linq;
 
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
-using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.DataStructures.BitSet>;
+using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.DataStructures.AbstractBitSet>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 namespace StackOverflowTagServer
@@ -214,83 +214,125 @@ namespace StackOverflowTagServer
 
         internal static void TestBitSets(string intermediateFilesFolder)
         {
-            var memoryUsageBefore = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            var size = BitSet.ToIntArrayLength(8000000);
-            int numBitSets = 100; // 1; // 4;
-            var dictionaryTest = new Dictionary<string, BitSet>();
-            for (int i = 0; i < numBitSets; i++)
-            {
-                var test = new int[size];
-                var testBit = new BitSet(test, size);
-                var bitsSet = 0;
-                //for (int j = i; j < 8000000; j += 1000000)
-                for (int j = i; j < 8000000; j += 19)
-                {
-                    testBit.MarkBit(j);
-                    bitsSet++;
-                }
-                Console.WriteLine("Set {0:N0} bits", bitsSet);
+            var numItems = 8000000;
+            var size = BitSet.ToIntArrayLength(numItems);
+            int numBitSetsToCreate = 100; // 1; // 4;
 
-                dictionaryTest.Add(i.ToString(), testBit);
+            var jumpsPerLoop = new[] { 10, 50, 100, 1000, 10000, 100000, 1000000 };
+            Console.Write("\n" + new String('#', Console.WindowWidth));
+            foreach (var jump in jumpsPerLoop)
+            {
+                var dictionaryBitSet = CreateBitSets(numBitSetsToCreate, size, numItems, jump);
+                var dictionaryCompressedBitSet = CreateCompressedBitSets(numBitSetsToCreate, size, numItems, jump);
+
+                SerialiseToDisk("BitSet-Normal.bin", intermediateFilesFolder, dictionaryBitSet);
+                SerialiseToDisk("BitSet-Compressed.bin", intermediateFilesFolder, dictionaryCompressedBitSet);
+
+                Console.Write("\n" + new String('#', Console.WindowWidth));
             }
-            //var memoryUsageAfter = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            //Console.WriteLine("Using {0:N2} MB", memoryUsageAfter - memoryUsageBefore);
-            //var sizeofBitSet = (sizeof(int) * size) / 1024.0 / 1024.0;
-            //Console.WriteLine("Comparison {0:N2} MB", sizeofBitSet);
-            //var nTags = 2398;
-            //Console.WriteLine("For {0:N0} Tags, {1:N2} MB", nTags, sizeofBitSet * nTags);
-            //var temp = testBit.IsMarked(123);
+
+            //var rtt = DeserialiseFromDisk<Dictionary<string, BitSet>>("BitSet-Testing.bin", intermediateFilesFolder);
+            //var rttLengh = rtt["0"].InternalArray.Length;
+            //var temp = fileSize + 1;
+        }
+
+        private static Dictionary<string, BitSet> CreateBitSets(int numBitSetsToCreate, int size, int numItems, int jumpsPerLoop)
+        {
+            var memoryUsageBefore = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            var timer = Stopwatch.StartNew();
+            var dictionaryBitSet = new Dictionary<string, BitSet>();
+            var bitsSet = 0;
+            for (int i = 0; i < numBitSetsToCreate; i++)
+            {
+                var bitSet = new BitSet(new int[size]);
+                bitsSet = 0;
+                for (int j = i; j < numItems; j += jumpsPerLoop)
+                {
+                    bitSet.MarkBit(j);
+                    bitsSet++;
+                    if (bitSet.IsMarked(j) == false)
+                        Console.WriteLine("ERROR as posn[{0}] in BitSet[{1}]", j, i);
+                }
+                dictionaryBitSet.Add(i.ToString(), bitSet);
+            }
+            timer.Stop();
+            Console.WriteLine("\nTook {0:N2} msecs to create {1} BitSets, each with {2:N0} individual Bit's Set",
+                              timer.Elapsed.TotalMilliseconds, numBitSetsToCreate, bitsSet);
 
             var memoryUsageAfter = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             Console.WriteLine("Using {0:N2} MB", memoryUsageAfter - memoryUsageBefore);
             var sizeofBitSet = (sizeof(int) * size) / 1024.0 / 1024.0;
-            Console.WriteLine("Comparison {0:N2} MB (sizeof(int) = {1} bytes)", sizeofBitSet * numBitSets, sizeof(int));
+            Console.WriteLine("Comparison {0:N2} MB (sizeof(int) = {1} bytes)", sizeofBitSet * numBitSetsToCreate, sizeof(int));
 
-            //SerialiseToDisk("BitSet-Testing.bin", intermediateFilesFolder, testBit);
-            SerialiseToDisk("BitSet-Testing.bin", intermediateFilesFolder, dictionaryTest);
-            var info = new FileInfo(Path.Combine(intermediateFilesFolder, "BitSet-Testing.bin"));
-            var fileSize = info.Length;
-            Console.WriteLine("Filesize: {0:N2} MB", fileSize / 1024.0 / 1024.0);
-            var rtt = DeserialiseFromDisk<Dictionary<string, BitSet>>("BitSet-Testing.bin", intermediateFilesFolder);
-            var rttLengh = rtt["0"].InternalArray.Length;
-            var temp = fileSize + 1;
+            return dictionaryBitSet;
+        }
+
+        private static Dictionary<string, CompressedBitSet> CreateCompressedBitSets(int numBitSetsToCreate, int size, int numItems, int jumpsPerLoop)
+        {
+            var memoryUsageBefore = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            var timer = Stopwatch.StartNew();
+            var dictionaryCompressedBitSet = new Dictionary<string, CompressedBitSet>();
+            var bitsSet = 0;
+            for (int i = 0; i < numBitSetsToCreate; i++)
+            {
+                var compressedBitSet = new CompressedBitSet(size, expectedFill: numItems / jumpsPerLoop);
+                bitsSet = 0;
+                for (int j = i; j < numItems; j += jumpsPerLoop)
+                {
+                    compressedBitSet.MarkBit(j);
+                    bitsSet++;
+                    if (compressedBitSet.IsMarked(j) == false)
+                        Console.WriteLine("ERROR at posn[{0}] in Compressed BitSet[{1}]", j, i);
+                }
+                dictionaryCompressedBitSet.Add(i.ToString(), compressedBitSet);
+            }
+            timer.Stop();
+            Console.WriteLine("\nTook {0:N2} msecs to create {1} Compressed BitSets, each with {2:N0} individual Bit's Set",
+                              timer.Elapsed.TotalMilliseconds, numBitSetsToCreate, bitsSet);
+
+            var memoryUsageAfter = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            Console.WriteLine("Using {0:N2} MB", memoryUsageAfter - memoryUsageBefore);
+            var sizeofBitSet = (sizeof(int) * size) / 1024.0 / 1024.0;
+            Console.WriteLine("Comparison {0:N2} MB (sizeof(int) = {1} bytes)\n", sizeofBitSet * numBitSetsToCreate, sizeof(int));
+
+            return dictionaryCompressedBitSet;
         }
 
         internal void TestBitSetsOnDeserialisedQuestionData()
         {
-            var bitSetTimer = Stopwatch.StartNew();
-            var byAnswerCount = GetTagBitSetForQueryType(QueryType.AnswerCount);
-            var cSharp = byAnswerCount["c#"];
-            var jQuery = byAnswerCount["jquery"];
-            var takeValue = 3; // 10; // for hex
-            var skipValue = 5;
-            string formatString = "X8", spacer = " ";
+            //var bitSetTimer = Stopwatch.StartNew();
+            //var byAnswerCount = GetTagBitSetForQueryType(QueryType.AnswerCount);
+            //var cSharp = byAnswerCount["c#"];
+            //var jQuery = byAnswerCount["jquery"];
+            //var takeValue = 3; // 10; // for hex
+            //var skipValue = 5;
+            //string formatString = "X8", spacer = " ";
 
-            //Console.WriteLine("cSharp:        {0}",
-            //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
-            //                  String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
-            //Console.WriteLine("jQuery:        {0}",
-            //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
-            //                  String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+            ////Console.WriteLine("cSharp:        {0}",
+            ////                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+            ////                  String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+            ////Console.WriteLine("jQuery:        {0}",
+            ////                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+            ////                  String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
 
-            jQuery.Not(); // Edits in-place, for real queries we NEED to make a copy
-                          //Console.WriteLine("NOT jQuery:    {0}",
-                          //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
-                          //                  String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+            //jQuery.Not(); // Edits in-place, for real queries we NEED to make a copy
+            //              //Console.WriteLine("NOT jQuery:    {0}",
+            //              //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+            //              //                  String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
 
-            cSharp.Or(jQuery); // Edits in-place, for real queries we NEED to make a copy
-                               //Console.WriteLine("cSharp OR (NOT jQuery)");
+            //cSharp.Or(jQuery); // Edits in-place, for real queries we NEED to make a copy
+            //                   //Console.WriteLine("cSharp OR (NOT jQuery)");
 
-            //cSharp.And(jQuery); // Edits in-place, for real queries we NEED to make a copy
-            //Console.WriteLine("cSharp AND (NOT jQuery)");
+            ////cSharp.And(jQuery); // Edits in-place, for real queries we NEED to make a copy
+            ////Console.WriteLine("cSharp AND (NOT jQuery)");
 
-            //Console.WriteLine("cSharp Result: {0}",
-            //                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
-            //                  String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
+            ////Console.WriteLine("cSharp Result: {0}",
+            ////                  //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
+            ////                  String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
 
-            bitSetTimer.Stop();
+            //bitSetTimer.Stop();
 
-            Log("Took {0} ({1:N0} ms) to do C# Or (Not jQuery)\n", bitSetTimer.Elapsed, bitSetTimer.ElapsedMilliseconds);
+            //Log("Took {0} ({1:N0} ms) to do C# Or (Not jQuery)\n", bitSetTimer.Elapsed, bitSetTimer.ElapsedMilliseconds);
         }
 
 #region QueryApiPassedThruToQueryProcessor
@@ -481,7 +523,7 @@ namespace StackOverflowTagServer
             return indices; // this is now sorted!!
         }
 
-        private void CreateBitSets(Dictionary<string, TagWithPositions> groupedTags)
+        private void CreateBitSets(Dictionary<string, TagWithPositions> groupedTags, bool useCompressedBitSets = false)
         {
             // First create all the BitSets we'll need, one per/Tag, per/QueryType
             var bitSetsTimer = Stopwatch.StartNew();
@@ -490,18 +532,23 @@ namespace StackOverflowTagServer
             var tagsToUse = GetTagsToUseForBitSets(questionsPerTag: 2500);
             foreach (var tagToUse in tagsToUse)
             {
-                tagsByAnswerCountBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
-                tagsByCreationDateBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
-                tagsByLastActivityDateBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
-                tagsByScoreBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
-                tagsByViewCountBitSet.Add(tagToUse, new BitSet(new int[arraySize], arraySize));
+                if (useCompressedBitSets)
+                {
+                    tagsByAnswerCountBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
+                    tagsByCreationDateBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
+                    tagsByLastActivityDateBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
+                    tagsByScoreBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
+                    tagsByViewCountBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
+                }
+                else
+                {
+                    tagsByAnswerCountBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
+                    tagsByCreationDateBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
+                    tagsByLastActivityDateBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
+                    tagsByScoreBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
+                    tagsByViewCountBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
+                }
             }
-
-            //Log("tagsByAnswerCountBitSet      contains {0:N0}, expected {1:N0}", tagsByAnswerCountBitSet.Count, tagsToUse.Length);
-            //Log("tagsByCreationDateBitSet     contains {0:N0}, expected {1:N0}", tagsByCreationDateBitSet.Count, tagsToUse.Length);
-            //Log("tagsByLastActivityDateBitSet contains {0:N0}, expected {1:N0}", tagsByLastActivityDateBitSet.Count, tagsToUse.Length);
-            //Log("tagsByScoreBitSet            contains {0:N0}, expected {1:N0}", tagsByScoreBitSet.Count, tagsToUse.Length);
-            //Log("tagsByViewCountBitSet        contains {0:N0}, expected {1:N0}", tagsByViewCountBitSet.Count, tagsToUse.Length);
 
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
