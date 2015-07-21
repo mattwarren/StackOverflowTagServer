@@ -109,14 +109,17 @@ namespace Server.Controllers
                 QueryString = HttpContext.Current.Request.QueryString
                                                  .ToPairs()
                                                  .ToDictionary(p => p.Key, p => p.Value),
+                TimingsInMilliseconds = new
+                {
+                    TotalTime = totalTime.TotalMilliseconds.ToString("N2"),
+                    TagsExpansion = tagsExpansionTime.TotalMilliseconds.ToString("N2"),
+                    RemainingTime = (totalTime - tagsExpansionTime).TotalMilliseconds.ToString("N2"),
+                },
                 TagsBeforeExpansion = leppieWildcards.Count,
                 TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
-                TagsExpansionMilliseconds = tagsExpansionTime.TotalMilliseconds.ToString("N2"),
-                TotalTimeMilliseconds = totalTime.TotalMilliseconds.ToString("N2"),
-                RemainingTimeMilliseconds = (totalTime - tagsExpansionTime).TotalMilliseconds.ToString("N2"),
-                QuestionIds = result.Questions.Select(qu => qu.Id),
                 InvalidResults = GetInvalidResults(result.Questions, queryInfo.Tag, queryInfo.OtherTag, queryInfo.Type, queryInfo.Operator),
-                ShouldHaveBeenExcludedResults = GetShouldHaveBeenExcludedResults(result.Questions, queryInfo.Type, queryInfo.Operator, leppieExpandedTags)
+                ShouldHaveBeenExcludedResults = GetShouldHaveBeenExcludedResults(result.Questions, queryInfo.Type, queryInfo.Operator, leppieExpandedTags),
+                QuestionIds = result.Questions.Select(qu => qu.Id),
             };
         }
 

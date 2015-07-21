@@ -51,7 +51,7 @@ namespace StackOverflowTagServer
         private readonly ComplexQueryProcessor complexQueryProcessor;
 
         /// <summary>
-        /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor <see cref="TagServer(List{Question})"></see>
+        /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor <see cref="TagServer(List{Question})" />
         /// </summary>
         public static TagServer CreateFromScratchAndSaveToDisk(List<Question> rawQuestions, string intermediateFilesFolder)
         {
@@ -64,8 +64,20 @@ namespace StackOverflowTagServer
                 var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
                 SerialiseToDisk(tagLookupFileName, intermediateFilesFolder, tagServer.GetTagLookupForQueryType(type));
 
-                var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
-                SerialiseToDisk(bitSetFileName, intermediateFilesFolder, tagServer.GetTagBitSetForQueryType(type));
+                //var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
+                //SerialiseToDisk(bitSetFileName, intermediateFilesFolder, tagServer.GetTagBitSetForQueryType(type));
+
+                var bitSet = tagServer.GetTagBitSetForQueryType(type);
+                if (bitSet.Values.First() is BitSet)
+                {
+                    var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
+                    SerialiseToDisk(bitSetFileName, intermediateFilesFolder, bitSet);
+                }
+                else if (bitSet.Values.First() is CompressedBitSet)
+                {
+                    var bitSetFileName = "intermediate-CompressedBitSet-" + type + ".bin";
+                    SerialiseToDisk(bitSetFileName, intermediateFilesFolder, bitSet);
+                }
             }
             // Now write out the AllTags Lookup, Tag -> Count (i.e. "C#" -> 579,321, "Java" -> 560,432)
             SerialiseToDisk(AllTagsFileName, intermediateFilesFolder, tagServer.AllTags);
@@ -76,7 +88,7 @@ namespace StackOverflowTagServer
         }
 
         /// <summary>
-        /// Private constructor that is used when creating the Tag Server from SCRATCH (<see cref="CreateFromScratchAndSaveToDisk"></see>)
+        /// Private constructor that is used when creating the Tag Server from SCRATCH (<see cref="CreateFromScratchAndSaveToDisk"/>)
         /// </summary>
         /// <param name="questionsList"></param>
         private TagServer(List<Question> questionsList)
@@ -104,7 +116,12 @@ namespace StackOverflowTagServer
 
             CreateSortedLists(groupedTags, useAlternativeMethod: true);
 
-            CreateBitSets(groupedTags);
+            Log(new string('#', Console.WindowWidth));
+            //Log("Creating regular BitSets");
+            //CreateBitSets(groupedTags);
+            Log("Creating COMPRESSED BitSets");
+            CreateBitSets(groupedTags, useCompressedBitSets: true);
+            Log(new string('#', Console.WindowWidth));
 
             //ValidateTagOrdering();
             //ValidateBitSetOrdering();
@@ -135,7 +152,7 @@ namespace StackOverflowTagServer
 
         /// <summary>
         /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor
-        /// <see cref="TagServer(List{Question}, TagLookup, Dictionary{QueryType, TagByQueryLookup}, Dictionary{QueryType, TagByQueryLookupBitSet})"></see>
+        /// <see cref="TagServer(List{Question}, TagLookup, Dictionary{QueryType, TagByQueryLookup}, Dictionary{QueryType, TagByQueryLookupBitSet})"/>
         /// </summary>
         public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder, bool deserialiseBitSets = true)
         {
@@ -172,7 +189,7 @@ namespace StackOverflowTagServer
         }
 
         /// <summary>
-        /// Private constructor that is used when creating the Tag Server from previously serialised data (<see cref="CreateFromSerialisedData"></see>)
+        /// Private constructor that is used when creating the Tag Server from previously serialised data (<see cref="CreateFromSerialisedData"/>)
         /// </summary>
         private TagServer(List<Question> questionsList, TagLookup allTags,
                           Dictionary<QueryType, TagByQueryLookup> intermediateLookups,
@@ -528,8 +545,8 @@ namespace StackOverflowTagServer
             // First create all the BitSets we'll need, one per/Tag, per/QueryType
             var bitSetsTimer = Stopwatch.StartNew();
             var arraySize = BitSet.ToIntArrayLength(questions.Count);
-            //var tagsToUse = GetTagsToUseForBitSets(questionsPerTag: 1000); // 2,397 Tags with MORE than 1,000 questions (out of 38,206)
-            var tagsToUse = GetTagsToUseForBitSets(questionsPerTag: 2500);
+            var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 1000); // 2,397 Tags with MORE than 1,000 questions
+            //var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 0); // Don't use this for REGULAR BitSets, get an OOM Exception
             foreach (var tagToUse in tagsToUse)
             {
                 if (useCompressedBitSets)
@@ -604,16 +621,21 @@ namespace StackOverflowTagServer
                 bitSetsTimer.Elapsed, bitSetsTimer.ElapsedMilliseconds, tagsToUse.Length * 5, memoryUsed, memoryUsed / 1024.0);
         }
 
-        private string[] GetTagsToUseForBitSets(int questionsPerTag)
+        private string[] GetTagsToUseForBitSets(int minQuestionsPerTag)
         {
-            // There are    48 Tags with MORE than 50,000 questions
-            // There are   113 Tags with MORE than 25,000 questions
-            // There are   306 Tags with MORE than 10,000 questions
-            // There are   607 Tags with MORE than  5,000 questions
-            // There are 1,155 Tags with MORE than  2,500 questions
-            // There are 2,397 Tags with MORE than  1,000 questions
+            // There are     48 Tags with MORE than 50,000 questions
+            // There are    113 Tags with MORE than 25,000 questions
+            // There are    306 Tags with MORE than 10,000 questions
+            // There are    607 Tags with MORE than  5,000 questions
+            // There are  1,155 Tags with MORE than  2,500 questions
+            // There are  2,397 Tags with MORE than  1,000 questions
+            // There are  3,975 Tags with MORE than    500 questions
+            // There are  7,230 Tags with MORE than    200 questions
+            // There are 10,814 Tags with MORE than    100 questions
+            // There are 15,691 Tags with MORE than     50 questions
+            // There are 27,658 Tags with MORE than     10 questions
             return allTags.OrderByDescending(t => t.Value)
-                          .Where(t => t.Value > questionsPerTag)
+                          .Where(t => t.Value > minQuestionsPerTag)
                           .Select(t => t.Key)
                           .ToArray();
         }
