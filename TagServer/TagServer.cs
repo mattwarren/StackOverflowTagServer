@@ -7,9 +7,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
-using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.DataStructures.AbstractBitSet>;
+//using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.DataStructures.AbstractBitSet>;
+//using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, StackOverflowTagServer.DataStructures.IBitmapIndex>;
+using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 namespace StackOverflowTagServer
@@ -53,9 +56,9 @@ namespace StackOverflowTagServer
         /// <summary>
         /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor <see cref="TagServer(List{Question})" />
         /// </summary>
-        public static TagServer CreateFromScratchAndSaveToDisk(List<Question> rawQuestions, string intermediateFilesFolder)
+        public static TagServer CreateFromScratchAndSaveToDisk(List<Question> rawQuestions, string intermediateFilesFolder, bool useCompressedBitSets = true)
         {
-            var tagServer = new TagServer(rawQuestions);
+            var tagServer = new TagServer(rawQuestions, useCompressedBitSets);
             var serializeTimer = Stopwatch.StartNew();
             Log("Serialisation folder: {0}", intermediateFilesFolder);
 
@@ -64,21 +67,53 @@ namespace StackOverflowTagServer
                 var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
                 SerialiseToDisk(tagLookupFileName, intermediateFilesFolder, tagServer.GetTagLookupForQueryType(type));
 
-                //var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
-                //SerialiseToDisk(bitSetFileName, intermediateFilesFolder, tagServer.GetTagBitSetForQueryType(type));
-
                 var bitSet = tagServer.GetTagBitSetForQueryType(type);
-                if (bitSet.Values.First() is BitSet)
+                if (bitSet.Count == 0)
+                    continue;
+
+                var timer = Stopwatch.StartNew();
+                var bitMapIndexSerialiser = new Ewah.EwahCompressedBitArraySerializer();
+                var bitMapIndexFileName = String.Format("intermediate-EWAH-BitMap-{0}.bin", type);
+                var bitMapFilePath = Path.Combine(intermediateFilesFolder, bitMapIndexFileName);
+                using (var fileSteam = new FileStream(bitMapFilePath, FileMode.Create))
                 {
-                    var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
-                    SerialiseToDisk(bitSetFileName, intermediateFilesFolder, bitSet);
+                    foreach (var item in bitSet)
+                    {
+                        // TODO we need a mechanism of packing all the <Tag, EwahCompressedBitArray> items into a single file
+                        //var lengthOfEntireRecord = ?? // length of EwahCompressedBitArray + length of Tag/String (in bytes) + length of any other markers
+                        //fileSteam.Write(BitConverter.GetBytes(lengthOfEntireRecord), 0, 4); // write length of the string (in bytes) out first
+
+                        var tagAsBytes = Encoding.UTF8.GetBytes(item.Key);
+                        fileSteam.Write(BitConverter.GetBytes(tagAsBytes.Length), 0, 4); // write length of the string (in bytes) out first
+                        fileSteam.Write(tagAsBytes, 0, tagAsBytes.Length);
+
+                        // We could write out the # of bits sets here?!, then use it as a sanity-check!?!?
+                        fileSteam.Write(BitConverter.GetBytes(item.Value.GetCardinality()), 0, 8); // long is 64-bit, 8 byte
+
+                        bitMapIndexSerialiser.Serialize(fileSteam, item.Value);
+                    }
                 }
-                else if (bitSet.Values.First() is CompressedBitSet)
-                {
-                    var bitSetFileName = "intermediate-CompressedBitSet-" + type + ".bin";
-                    SerialiseToDisk(bitSetFileName, intermediateFilesFolder, bitSet);
-                }
+                timer.Stop();
+                var info = new FileInfo(bitMapFilePath);
+                Log("Took {0} ({1,6:N0} ms) to serialise: {2} Size: {3,6:N2} MB",
+                    timer.Elapsed, timer.ElapsedMilliseconds, bitMapIndexFileName.PadRight(50), info.Length / 1024.0 / 1024.0);
+
+                //if (bitSet.Values.First() is BitmapIndex)
+                //{
+                //    var bitSetFileName = "intermediate-BitMap Index-" + type + ".bin";
+                //    SerialiseToDisk(bitSetFileName, intermediateFilesFolder, bitSet);
+                //    // TODO see if this can be done more efficiently, i.e. as a straight cast?!
+                //    //SerialiseToDisk(bitSetFileName, intermediateFilesFolder, bitSet.ToDictionary(kvp => kvp.Key, kvp => kvp.Value as BitMap Index));
+                //}
+                //else if (bitSet.Values.First() is CompressedBitmapIndex)
+                //{
+                //    var bitSetFileName = "intermediate-CompressedBitSet-" + type + ".bin";
+                //    SerialiseToDisk(bitSetFileName, intermediateFilesFolder, bitSet);
+                //    // TODO see if this can be done more efficiently, i.e. as a straight cast?!
+                //    //SerialiseToDisk(bitSetFileName, intermediateFilesFolder, bitSet.ToDictionary(kvp => kvp.Key, kvp => kvp.Value as CompressedBitSet));
+                //}
             }
+
             // Now write out the AllTags Lookup, Tag -> Count (i.e. "C#" -> 579,321, "Java" -> 560,432)
             SerialiseToDisk(AllTagsFileName, intermediateFilesFolder, tagServer.AllTags);
             serializeTimer.Stop();
@@ -91,7 +126,7 @@ namespace StackOverflowTagServer
         /// Private constructor that is used when creating the Tag Server from SCRATCH (<see cref="CreateFromScratchAndSaveToDisk"/>)
         /// </summary>
         /// <param name="questionsList"></param>
-        private TagServer(List<Question> questionsList)
+        private TagServer(List<Question> questionsList, bool useCompressedBitSets = true)
         {
             questions = questionsList;
             queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
@@ -117,10 +152,16 @@ namespace StackOverflowTagServer
             CreateSortedLists(groupedTags, useAlternativeMethod: true);
 
             Log(new string('#', Console.WindowWidth));
-            //Log("Creating regular BitSets");
-            //CreateBitSets(groupedTags);
-            Log("Creating COMPRESSED BitSets");
-            CreateBitSets(groupedTags, useCompressedBitSets: true);
+            if (useCompressedBitSets)
+            {
+                Log("Creating COMPRESSED BitSets");
+                CreateBitSets(groupedTags, useCompressedBitSets: true);
+            }
+            else
+            {
+                Log("Creating regular BitSets");
+                CreateBitSets(groupedTags);
+            }
             Log(new string('#', Console.WindowWidth));
 
             //ValidateTagOrdering();
@@ -154,7 +195,8 @@ namespace StackOverflowTagServer
         /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor
         /// <see cref="TagServer(List{Question}, TagLookup, Dictionary{QueryType, TagByQueryLookup}, Dictionary{QueryType, TagByQueryLookupBitSet})"/>
         /// </summary>
-        public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder, bool deserialiseBitSets = true)
+        public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder,
+                                                         bool deserialiseBitSets = true, bool useCompressedBitSets = true)
         {
             var deserializeTimer = Stopwatch.StartNew();
             Log("Deserialisation folder: {0}", intermediateFilesFolder);
@@ -170,10 +212,26 @@ namespace StackOverflowTagServer
 
                 if (deserialiseBitSets)
                 {
-                    var bitSetFileName = "intermediate-BitSet-" + type + ".bin";
-                    var tempBitSet = DeserialiseFromDisk<TagByQueryLookupBitSet>(bitSetFileName, intermediateFilesFolder);
-                    intermediateBitSets.Add(type, tempBitSet);
-                    Log("{0,20} contains {1:N0} Tag BitSets", type, tempBitSet.Count);
+                    if (useCompressedBitSets)
+                    {
+                        var bitSetFileName = String.Format("intermediate-CompressedBitSet-{0}.bin", type);
+                        //var tempBitSet = DeserialiseFromDisk<Dictionary<string, CompressedBitSet>>(bitSetFileName, intermediateFilesFolder);
+                        //// TODO see if this can be done more efficiently, i.e. as a straight cast?!
+                        //intermediateBitSets.Add(type, tempBitSet.ToDictionary(kvp => kvp.Key, kvp => kvp.Value as IBitSet));
+                        var tempBitSet = DeserialiseFromDisk<TagByQueryLookupBitSet>(bitSetFileName, intermediateFilesFolder);
+                        intermediateBitSets.Add(type, tempBitSet);
+                        Log("{0,20} contains {1:N0} Tag BitSets", type, tempBitSet.Count);
+                    }
+                    else
+                    {
+                        var bitSetFileName = String.Format("intermediate-BitMap Index-{0}.bin", type);
+                        //var tempBitSet = DeserialiseFromDisk<Dictionary<string, BitMap Index>>(bitSetFileName, intermediateFilesFolder);
+                        //// TODO see if this can be done more efficiently, i.e. as a straight cast?!
+                        //intermediateBitSets.Add(type, tempBitSet.ToDictionary(kvp => kvp.Key, kvp => kvp.Value as IBitSet));
+                        var tempBitSet = DeserialiseFromDisk<TagByQueryLookupBitSet>(bitSetFileName, intermediateFilesFolder);
+                        intermediateBitSets.Add(type, tempBitSet);
+                        Log("{0,20} contains {1:N0} Tag BitSets", type, tempBitSet.Count);
+                    }
                 }
                 else
                 {
@@ -232,7 +290,7 @@ namespace StackOverflowTagServer
         internal static void TestBitSets(string intermediateFilesFolder)
         {
             var numItems = 8000000;
-            var size = BitSet.ToIntArrayLength(numItems);
+            var size = BitmapIndex.ToIntArrayLength(numItems);
             int numBitSetsToCreate = 100; // 1; // 4;
 
             var jumpsPerLoop = new[] { 10, 50, 100, 1000, 10000, 100000, 1000000 };
@@ -242,33 +300,33 @@ namespace StackOverflowTagServer
                 var dictionaryBitSet = CreateBitSets(numBitSetsToCreate, size, numItems, jump);
                 var dictionaryCompressedBitSet = CreateCompressedBitSets(numBitSetsToCreate, size, numItems, jump);
 
-                SerialiseToDisk("BitSet-Normal.bin", intermediateFilesFolder, dictionaryBitSet);
-                SerialiseToDisk("BitSet-Compressed.bin", intermediateFilesFolder, dictionaryCompressedBitSet);
+                SerialiseToDisk("BitMap Index-Normal.bin", intermediateFilesFolder, dictionaryBitSet);
+                SerialiseToDisk("BitMap Index-Compressed.bin", intermediateFilesFolder, dictionaryCompressedBitSet);
 
                 Console.Write("\n" + new String('#', Console.WindowWidth));
             }
 
-            //var rtt = DeserialiseFromDisk<Dictionary<string, BitSet>>("BitSet-Testing.bin", intermediateFilesFolder);
+            //var rtt = DeserialiseFromDisk<Dictionary<string, BitMap Index>>("BitMap Index-Testing.bin", intermediateFilesFolder);
             //var rttLengh = rtt["0"].InternalArray.Length;
             //var temp = fileSize + 1;
         }
 
-        private static Dictionary<string, BitSet> CreateBitSets(int numBitSetsToCreate, int size, int numItems, int jumpsPerLoop)
+        private static Dictionary<string, BitmapIndex> CreateBitSets(int numBitSetsToCreate, int size, int numItems, int jumpsPerLoop)
         {
             var memoryUsageBefore = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             var timer = Stopwatch.StartNew();
-            var dictionaryBitSet = new Dictionary<string, BitSet>();
+            var dictionaryBitSet = new Dictionary<string, BitmapIndex>();
             var bitsSet = 0;
             for (int i = 0; i < numBitSetsToCreate; i++)
             {
-                var bitSet = new BitSet(new int[size]);
+                var bitSet = new BitmapIndex(new int[size]);
                 bitsSet = 0;
                 for (int j = i; j < numItems; j += jumpsPerLoop)
                 {
                     bitSet.MarkBit(j);
                     bitsSet++;
                     if (bitSet.IsMarked(j) == false)
-                        Console.WriteLine("ERROR as posn[{0}] in BitSet[{1}]", j, i);
+                        Console.WriteLine("ERROR as posn[{0}] in BitMap Index[{1}]", j, i);
                 }
                 dictionaryBitSet.Add(i.ToString(), bitSet);
             }
@@ -284,22 +342,22 @@ namespace StackOverflowTagServer
             return dictionaryBitSet;
         }
 
-        private static Dictionary<string, CompressedBitSet> CreateCompressedBitSets(int numBitSetsToCreate, int size, int numItems, int jumpsPerLoop)
+        private static Dictionary<string, CompressedBitmapIndex> CreateCompressedBitSets(int numBitSetsToCreate, int size, int numItems, int jumpsPerLoop)
         {
             var memoryUsageBefore = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             var timer = Stopwatch.StartNew();
-            var dictionaryCompressedBitSet = new Dictionary<string, CompressedBitSet>();
+            var dictionaryCompressedBitSet = new Dictionary<string, CompressedBitmapIndex>();
             var bitsSet = 0;
             for (int i = 0; i < numBitSetsToCreate; i++)
             {
-                var compressedBitSet = new CompressedBitSet(size, expectedFill: numItems / jumpsPerLoop);
+                var compressedBitSet = new CompressedBitmapIndex(size, expectedFill: numItems / jumpsPerLoop);
                 bitsSet = 0;
                 for (int j = i; j < numItems; j += jumpsPerLoop)
                 {
                     compressedBitSet.MarkBit(j);
                     bitsSet++;
                     if (compressedBitSet.IsMarked(j) == false)
-                        Console.WriteLine("ERROR at posn[{0}] in Compressed BitSet[{1}]", j, i);
+                        Console.WriteLine("ERROR at posn[{0}] in Compressed BitMap Index[{1}]", j, i);
                 }
                 dictionaryCompressedBitSet.Add(i.ToString(), compressedBitSet);
             }
@@ -469,7 +527,7 @@ namespace StackOverflowTagServer
 
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Log("Took {0} ({1:N0} ms) to group all the tags - Using {2:N2} MB ({3:N2} GB) of memory\n",
+            Log("Took {0} ({1,6:N0} ms) to group all the tags - Using {2:N2} MB ({3:N2} GB) of memory\n",
                 tagGroupingTimer.Elapsed, tagGroupingTimer.ElapsedMilliseconds, mbUsed, mbUsed / 1024.0);
             return groupedTags;
         }
@@ -495,7 +553,7 @@ namespace StackOverflowTagServer
 
             GC.Collect(2, GCCollectionMode.Forced);
             var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Log("Took {0} ({1:N0} ms) to sort the {2:N0} arrays {3}- Using {4:N2} MB ({5:N2} GB) of memory\n",
+            Log("Took {0} ({1,6:N0} ms) to sort the {2:N0} arrays {3}- Using {4:N2} MB ({5:N2} GB) of memory\n",
                 sortingTimer.Elapsed, sortingTimer.ElapsedMilliseconds, groupedTags.Count * 5,
                 useAlternativeMethod ? "ALTERNATIVE method " : "", memoryUsed, memoryUsed / 1024.0);
         }
@@ -544,27 +602,40 @@ namespace StackOverflowTagServer
         {
             // First create all the BitSets we'll need, one per/Tag, per/QueryType
             var bitSetsTimer = Stopwatch.StartNew();
-            var arraySize = BitSet.ToIntArrayLength(questions.Count);
-            var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 1000); // 2,397 Tags with MORE than 1,000 questions
-            //var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 0); // Don't use this for REGULAR BitSets, get an OOM Exception
+            var arraySize = BitmapIndex.ToIntArrayLength(questions.Count);
+            var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 0); // Don't use this for REGULAR BitSets, get an OOM Exception
+            //var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 500); // 3,975 Tags with MORE than 500 questions
+            //var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 1000); // 2,397 Tags with MORE than 1,000 questions
+            //var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 50000); // 48 Tags with MORE than 50,000 questions
+            //var tagCounter = 0;
             foreach (var tagToUse in tagsToUse)
             {
                 if (useCompressedBitSets)
                 {
-                    tagsByAnswerCountBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
-                    tagsByCreationDateBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
-                    tagsByLastActivityDateBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
-                    tagsByScoreBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
-                    tagsByViewCountBitSet.Add(tagToUse, new CompressedBitSet(arraySize));
+                    //tagsByAnswerCountBitSet.Add(tagToUse, new CompressedBitmapIndex(arraySize, expectedFill: TotalCount(QueryType.AnswerCount, tagToUse)));
+                    //tagsByCreationDateBitSet.Add(tagToUse, new CompressedBitmapIndex(arraySize, expectedFill: TotalCount(QueryType.CreationDate, tagToUse)));
+                    //tagsByLastActivityDateBitSet.Add(tagToUse, new CompressedBitmapIndex(arraySize, expectedFill: TotalCount(QueryType.LastActivityDate, tagToUse)));
+                    //tagsByScoreBitSet.Add(tagToUse, new CompressedBitmapIndex(arraySize, expectedFill: TotalCount(QueryType.Score, tagToUse)));
+                    //tagsByViewCountBitSet.Add(tagToUse, new CompressedBitmapIndex(arraySize, expectedFill: TotalCount(QueryType.ViewCount, tagToUse)));
+
+                    tagsByAnswerCountBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                    tagsByCreationDateBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                    tagsByLastActivityDateBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                    tagsByScoreBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                    tagsByViewCountBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
                 }
                 else
                 {
-                    tagsByAnswerCountBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
-                    tagsByCreationDateBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
-                    tagsByLastActivityDateBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
-                    tagsByScoreBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
-                    tagsByViewCountBitSet.Add(tagToUse, new BitSet(new int[arraySize]));
+                    //tagsByAnswerCountBitSet.Add(tagToUse, new BitmapIndex(new int[arraySize]));
+                    //tagsByCreationDateBitSet.Add(tagToUse, new BitmapIndex(new int[arraySize]));
+                    //tagsByLastActivityDateBitSet.Add(tagToUse, new BitmapIndex(new int[arraySize]));
+                    //tagsByScoreBitSet.Add(tagToUse, new BitmapIndex(new int[arraySize]));
+                    //tagsByViewCountBitSet.Add(tagToUse, new BitmapIndex(new int[arraySize]));
                 }
+
+                //tagCounter++;
+                //if (tagCounter % 1000 == 0 && tagCounter > 0)
+                //    Log("Created BitSets for {0,8:N0} Tags ({1})", tagCounter, bitSetsTimer.Elapsed);
             }
 
             GC.Collect(2, GCCollectionMode.Forced);
@@ -577,16 +648,21 @@ namespace StackOverflowTagServer
             {
                 var questionsForQuery = GetTagLookupForQueryType(queryType)[ALL_TAGS_KEY];
                 var sanityCheck = new Dictionary<string, int>();
+                var bitSetsForQuery = GetTagBitSetForQueryType(queryType);
+                if (bitSetsForQuery.Count == 0)
+                    continue;
+
+                var populationTimer = Stopwatch.StartNew();
                 foreach (var item in questionsForQuery.Select((QuestionId, Index) => new { QuestionId, Index }))
                 {
                     var question = questions[item.QuestionId];
-                    var bitSetsForQuery = GetTagBitSetForQueryType(queryType);
                     if (question.Tags.Any(t => bitSetsForQuery.ContainsKey(t)) == false)
                         continue;
 
                     foreach (var tag in question.Tags.Where(t => bitSetsForQuery.ContainsKey(t)))
                     {
-                        bitSetsForQuery[tag].MarkBit(item.Index);
+                        //bitSetsForQuery[tag].MarkBit(item.Index);
+                        bitSetsForQuery[tag].Set(item.Index);
 
                         if (sanityCheck.ContainsKey(tag))
                             sanityCheck[tag]++;
@@ -594,7 +670,10 @@ namespace StackOverflowTagServer
                             sanityCheck.Add(tag, 1);
                     }
                 }
+                populationTimer.Stop();
+                Log("Took {0} ({1,6:N0} ms) to populate BitMap Index for {2}", populationTimer.Elapsed, populationTimer.ElapsedMilliseconds, queryType);
 
+                var sanityCheckTimer = Stopwatch.StartNew();
                 foreach (var item in sanityCheck.OrderByDescending(t => t.Value))
                 {
                     var firstError = true;
@@ -612,12 +691,14 @@ namespace StackOverflowTagServer
                         Log("\t[{0}, {1:N0}]{2}", item.Key, item.Value, errorText);
                     }
                 }
+                sanityCheckTimer.Stop();
+                Log("Took {0} ({1,6:N0} ms) to sanity-check BitMap Index for {2}", sanityCheckTimer.Elapsed, sanityCheckTimer.ElapsedMilliseconds, queryType);
             }
             bitSetsTimer.Stop();
 
             GC.Collect(2, GCCollectionMode.Forced);
             var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Log("Took {0} ({1:N0} ms) to create the {2:N0} Bit Sets - Using {3:N2} MB ({4:N2} GB) of memory in total\n",
+            Log("Took {0} ({1,6:N0} ms) to create the {2:N0} Bit Sets - Using {3:N2} MB ({4:N2} GB) of memory in total\n",
                 bitSetsTimer.Elapsed, bitSetsTimer.ElapsedMilliseconds, tagsToUse.Length * 5, memoryUsed, memoryUsed / 1024.0);
         }
 
@@ -650,7 +731,7 @@ namespace StackOverflowTagServer
             validator.ValidateTags(GetTagLookupForQueryType(QueryType.ViewCount), (qu, prev) => Nullable.Compare(qu.ViewCount, prev.ViewCount) <= 0);
             validator.ValidateTags(GetTagLookupForQueryType(QueryType.AnswerCount), (qu, prev) => Nullable.Compare(qu.AnswerCount, prev.AnswerCount) <= 0);
             validationTimer.Stop();
-            Log("Took {0} ({1:N0} ms) to VALIDATE all the {2:N0} arrays\n",
+            Log("Took {0} ({1,6:N0} ms) to VALIDATE all the {2:N0} arrays\n",
                   validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
         }
 
@@ -672,7 +753,7 @@ namespace StackOverflowTagServer
             itemTimer.Stop();
             var info = new FileInfo(filePath);
             Log("Took {0} ({1,6:N0} ms) to serialise: {2} Size: {3,6:N2} MB",
-                itemTimer.Elapsed, itemTimer.ElapsedMilliseconds, fileName.PadRight(42), info.Length / 1024.0 / 1024.0);
+                itemTimer.Elapsed, itemTimer.ElapsedMilliseconds, fileName.PadRight(50), info.Length / 1024.0 / 1024.0);
         }
 
         private static T DeserialiseFromDisk<T>(string fileName, string folder)
@@ -687,7 +768,7 @@ namespace StackOverflowTagServer
             timer.Stop();
             var info = new FileInfo(filePath);
             Log("Took {0} ({1,6:N0} ms) to DE-serialise: {2} Size: {3,6:N2} MB",
-                timer.Elapsed, timer.ElapsedMilliseconds, fileName.PadRight(42), info.Length / 1024.0 / 1024.0);
+                timer.Elapsed, timer.ElapsedMilliseconds, fileName.PadRight(50), info.Length / 1024.0 / 1024.0);
 
             return result;
         }

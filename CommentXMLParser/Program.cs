@@ -72,7 +72,7 @@ namespace CommentXMLParser
                     .ToList();
                 timer.Stop();
 
-                Console.WriteLine("Took {0} ({1} ms) to process {2} items",
+                Console.WriteLine("Took {0} ({1,6} ms) to process {2} items",
                                   timer.Elapsed, timer.ElapsedMilliseconds, questions.Count);
 
                 foreach (var value in questions.Take(10))

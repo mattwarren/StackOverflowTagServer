@@ -40,7 +40,7 @@ namespace StackOverflowTagServer
             trie.AddRangeAllowDuplicates(allTags.Select(t => new TrieEntry<int>(Reverse(t.Key), TrieReverseTerminator)));
             trieSetupTimer.Stop();
 
-            Console.WriteLine("\nTook {0} ({1:N2} ms) to SETUP the Trie (ONE-OFF cost)", trieSetupTimer.Elapsed, trieSetupTimer.Elapsed.TotalMilliseconds);
+            Console.WriteLine("\nTook {0} ({1,6:N2} ms) to SETUP the Trie (ONE-OFF cost)", trieSetupTimer.Elapsed, trieSetupTimer.Elapsed.TotalMilliseconds);
 
             return trie;
         }
@@ -93,7 +93,7 @@ namespace StackOverflowTagServer
                 }
             }
             nGramsTimer.Stop();
-            Console.WriteLine("\nTook {0} ({1:N2} ms) to create {2:N0} n-grams (ONE-OFF cost)\n", nGramsTimer.Elapsed, nGramsTimer.Elapsed.TotalMilliseconds, allNGrams.Count);
+            Console.WriteLine("\nTook {0} ({1,6:N2} ms) to create {2:N0} n-grams (ONE-OFF cost)\n", nGramsTimer.Elapsed, nGramsTimer.Elapsed.TotalMilliseconds, allNGrams.Count);
 
             return allNGrams;
         }
@@ -235,7 +235,7 @@ namespace StackOverflowTagServer
                 }
             }
 
-            Console.WriteLine("Took {0} ({1,5:N0} ms) for Trie expansion to do brute force searches", bruteForceTimer.Elapsed, bruteForceTimer.ElapsedMilliseconds);
+            Console.WriteLine("Took {0} ({1,6:N0} ms) for Trie expansion to do brute force searches", bruteForceTimer.Elapsed, bruteForceTimer.ElapsedMilliseconds);
 
             return expandedTags;
         }
@@ -337,7 +337,7 @@ namespace StackOverflowTagServer
             }
             //expandTagsTimer.Stop();
 
-            //Console.WriteLine("Took {0} ({1,5:N0} ms) in TOTAL, to expand to \"{2}\" to {3} Tags ({4} in total):",
+            //Console.WriteLine("Took {0} ({1,6:N0} ms) in TOTAL, to expand to \"{2}\" to {3} Tags ({4} in total):",
             //                  expandTagsTimer.Elapsed, expandTagsTimer.ElapsedMilliseconds, tagPattern, tagsAdded, expandedTags.Count);
             //Console.WriteLine(String.Join(", ", expandedTags));
             //Console.WriteLine();

@@ -1,5 +1,6 @@
 ﻿using Shared;
 using StackOverflowTagServer.DataStructures;
+using StackOverflowTagServer.Querying;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,7 +10,6 @@ using System.Runtime;
 using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
-using StackOverflowTagServer.Querying;
 
 // ReSharper disable LocalizableElement
 namespace StackOverflowTagServer
@@ -30,24 +30,26 @@ namespace StackOverflowTagServer
             var startupTimer = Stopwatch.StartNew();
             var rawQuestions = TagServer.GetRawQuestionsFromDisk(folder, filename);
 
-            //TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
-            //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
-            TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder, deserialiseBitSets: false);
+            TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder, useCompressedBitSets: true);
+            //TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder, useCompressedBitSets: false);
+
+            //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder, useCompressedBitSets: true);
+            //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder, deserialiseBitSets: false);
 
             // we can't do this if "deserialiseBitSets: false" is used above
             //tagServer.TestBitSetsOnDeserialisedQuestionData();
 
-            PrintQuestionStats(rawQuestions);
-            PrintTagStats(tagServer.AllTags);
+            //PrintQuestionStats(rawQuestions);
+            //PrintTagStats(tagServer.AllTags);
 
             startupTimer.Stop();
 
             GC.Collect(2, GCCollectionMode.Forced);
             var totalMemory = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Console.WriteLine("Took {0} ({1:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL",
+            Console.WriteLine("Took {0} ({1,6:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL",
                               startupTimer.Elapsed, startupTimer.Elapsed.TotalMilliseconds, totalMemory, totalMemory / 1024.0);
 
-            RunComparisonQueries(tagServer);
+            //RunComparisonQueries(tagServer);
             return;
 
             Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);
@@ -379,10 +381,15 @@ namespace StackOverflowTagServer
             }
 
             Console.WriteLine();
+            totalSoFar = 0;
             foreach (var bucket in histogram.OrderByDescending(h => h.Key))
             {
-                Console.WriteLine("{0,8:N0}: {1} {2}",
-                    bucket.Key, bucket.Value.Count.ToString("N0").PadRight(8), totalsPerBucket[bucket.Key].ToString("N0").PadRight(8));
+                totalSoFar += bucket.Value.Count;
+                Console.WriteLine("{0,8:N0}: {1} {2} {3}",
+                    bucket.Key,
+                    bucket.Value.Count.ToString("N0").PadRight(8),
+                    totalsPerBucket[bucket.Key].ToString("N0").PadRight(8),
+                    totalSoFar.ToString("N0").PadRight(8));
             }
         }
 

@@ -82,6 +82,9 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="EWAH">
+      <HintPath>..\EWAH (Compressed BitMap Index)\EWAH.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="protobuf-net">
       <HintPath>..\packages\protobuf-net.2.0.0.668\lib\net40\protobuf-net.dll</HintPath>
@@ -93,12 +96,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DataStructures\AbstractBitSet.cs" />
+    <Compile Include="DataStructures\AbstractBitmapIndex.cs" />
+    <Compile Include="DataStructures\BitmapIndex.cs" />
     <Compile Include="DataStructures\CompressedBitSet.cs" />
+    <Compile Include="DataStructures\IBitSet.cs" />
     <Compile Include="Querying\BaseQueryProcessor.cs" />
     <Compile Include="CLR\BitHelper.cs" />
     <Compile Include="Querying\ComplexQueryProcessor.cs" />
-    <Compile Include="DataStructures\BitSet.cs" />
     <Compile Include="DataStructures\DisposableAction.cs" />
     <Compile Include="CLR\HashHelpers.cs" />
     <Compile Include="CLR\HashSet.cs" />

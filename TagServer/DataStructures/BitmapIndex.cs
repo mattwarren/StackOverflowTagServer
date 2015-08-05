@@ -37,10 +37,13 @@ namespace StackOverflowTagServer.DataStructures
     /// to the position within the array of ints.
     /// </summary>
     [ProtoContract(UseProtoMembersOnly = true, SkipConstructor = true)]
-    internal class BitSet : AbstractBitSet
+    //internal class BitmapIndex : AbstractBitmapIndex
+    public class BitmapIndex : IBitmapIndex
     {
         private const byte MarkedBitFlag = 1;
         private const byte IntSize = 32;
+
+        private static int SerializationCounter = 0;
 
         [ProtoMember(1)]
         // m_length of underlying int array (not logical bit array)
@@ -58,7 +61,7 @@ namespace StackOverflowTagServer.DataStructures
         /// </summary>
         /// <param name="bitArray">int array to hold bits</param>
         /// <param name="length">length of int array</param>
-        internal BitSet(int[] bitArray)
+        internal BitmapIndex(int[] bitArray)
         {
             m_array = bitArray;
             m_length = bitArray.Length;
@@ -68,7 +71,8 @@ namespace StackOverflowTagServer.DataStructures
         /// Mark bit at specified position
         /// </summary>
         /// <param name="bitPosition"></param>
-        internal override void MarkBit(int bitPosition)
+        //internal override void MarkBit(int bitPosition)
+        public void MarkBit(int bitPosition)
         {
             int bitArrayIndex = bitPosition / IntSize;
             if (bitArrayIndex < m_length && bitArrayIndex >= 0)
@@ -106,7 +110,8 @@ namespace StackOverflowTagServer.DataStructures
         /// </summary>
         /// <param name="bitPosition"></param>
         /// <returns></returns>
-        internal override bool IsMarked(int bitPosition)
+        //internal override bool IsMarked(int bitPosition)
+        public bool IsMarked(int bitPosition)
         {
             int bitArrayIndex = bitPosition / IntSize;
             if (bitArrayIndex < m_length && bitArrayIndex >= 0)
@@ -124,7 +129,7 @@ namespace StackOverflowTagServer.DataStructures
         /// Returns a reference to the current instance ANDed with value.
         /// Code from And http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932
         /// </summary>
-        internal BitSet And(BitSet value)
+        internal BitmapIndex And(BitmapIndex value)
         {
             if (value == null)
                 throw new ArgumentNullException("value");
@@ -143,7 +148,7 @@ namespace StackOverflowTagServer.DataStructures
         /// Returns a reference to the current instance ORed with value.
         /// Code from Or http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,d6b98dd3d39e346e
         /// </summary>
-        internal BitSet Or(BitSet value)
+        internal BitmapIndex Or(BitmapIndex value)
         {
             if (value == null)
                 throw new ArgumentNullException("value");
@@ -162,7 +167,7 @@ namespace StackOverflowTagServer.DataStructures
         /// Returns a reference to the current instance XORed with value.
         /// Code from Xor http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,0a9d097e057af932
         /// </summary>
-        internal BitSet Xor(BitSet value)
+        internal BitmapIndex Xor(BitmapIndex value)
         {
             if (value == null)
                 throw new ArgumentNullException("value");
@@ -183,7 +188,7 @@ namespace StackOverflowTagServer.DataStructures
         /// Code from Not http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,e71a526d814e6d57
         /// </summary>
         /// <returns></returns>
-        internal BitSet Not()
+        internal BitmapIndex Not()
         {
             for (int i = 0; i < m_array.Length; i++)
             {
@@ -210,5 +215,27 @@ namespace StackOverflowTagServer.DataStructures
         {
             return n > 0 ? ((n - 1) / IntSize + 1) : 0;
         }
+
+        // TODO move these callbacks to the base class?!?
+
+        //// See http://stackoverflow.com/questions/14838379/protobuf-net-post-deserialization-handler/14839426#14839426
+        //// and https://code.google.com/p/protobuf-net/wiki/Attributes
+        //[ProtoBeforeSerialization]
+        //private void OnSerializing()
+        //{
+        //    //if (SerializationCounter > 10000 || (SerializationCounter % 1000 == 0 && SerializationCounter > 0))
+        //    //if (SerializationCounter % 1000 == 0 && SerializationCounter > 0)
+        //    //    Console.Write("1) SerializING {0,12:N0} - m_length={1:N0}", SerializationCounter, m_length);
+        //}
+
+        //[ProtoAfterSerialization]
+        //private void OnSerialized()
+        //{
+        //    //if (SerializationCounter > 10000 || (SerializationCounter % 1000 == 0 && SerializationCounter > 0))
+        //    if (SerializationCounter % 1000 == 0 && SerializationCounter > 0)
+        //        Console.WriteLine("1) SerializED {0,12:N0} - m_length={1:N0}", SerializationCounter, m_length);
+
+        //    SerializationCounter++;
+        //}
     }
 }
