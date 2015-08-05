@@ -30,13 +30,9 @@ namespace StackOverflowTagServer
             var startupTimer = Stopwatch.StartNew();
             var rawQuestions = TagServer.GetRawQuestionsFromDisk(folder, filename);
 
-            TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder, useCompressedBitSets: true);
-            //TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder, useCompressedBitSets: false);
+            TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
+            //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
 
-            //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder, useCompressedBitSets: true);
-            //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder, deserialiseBitSets: false);
-
-            // we can't do this if "deserialiseBitSets: false" is used above
             //tagServer.TestBitSetsOnDeserialisedQuestionData();
 
             //PrintQuestionStats(rawQuestions);
