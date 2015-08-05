@@ -102,7 +102,7 @@ namespace CommentXMLParser
                 rttQuestions = Serializer.Deserialize<List<Question>>(file);
             }
             fileReadTimer.Stop();
-            
+
             Console.WriteLine("Took {0} to DE-serialise {1} items from the file", fileReadTimer.Elapsed, rttQuestions.Count);
             Console.WriteLine("Serialised file is {0}\n", HumanReadableFileSize(new FileInfo(filename).Length));
 
@@ -147,29 +147,5 @@ namespace CommentXMLParser
 
             return int.Parse(text);
         }
-
-        // Using version from Shared Library
-        //[ProtoContract]
-        //public class Question
-        //{
-        //    [ProtoMember(1)]
-        //    public long Id { get; set; }
-        //    [ProtoMember(2)]
-        //    public string Title { get; set; }
-        //    [ProtoMember(3)]
-        //    public string Tags { get; set; }
-        //    [ProtoMember(4)]
-        //    public DateTime CreationDate { get; set; }
-        //    [ProtoMember(5)]
-        //    public DateTime LastActivityDate { get; set; }
-        //    [ProtoMember(6)]
-        //    public int? Score { get; set; }
-        //    [ProtoMember(7)]
-        //    public int? ViewCount { get; set; }
-        //    [ProtoMember(8)]
-        //    public int? AnswerCount { get; set; }
-        //    [ProtoMember(9)]
-        //    public int? AcceptedAnswerId { get; set; }
-        //}
     }
 }
