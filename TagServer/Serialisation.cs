@@ -1,4 +1,5 @@
-﻿using ProtoBuf;
+﻿using Ewah;
+using ProtoBuf;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -10,7 +11,7 @@ namespace StackOverflowTagServer
 {
     internal static class Serialisation
     {
-        private static Ewah.EwahCompressedBitArraySerializer bitMapIndexSerialiser = new Ewah.EwahCompressedBitArraySerializer();
+        private static EwahCompressedBitArraySerializer bitMapIndexSerialiser = new EwahCompressedBitArraySerializer();
 
         internal static void SerialiseToDisk<T>(string fileName, string folder, T item)
         {

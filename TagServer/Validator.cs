@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Ewah;
+using System.Diagnostics;
 
 namespace StackOverflowTagServer
 {
@@ -14,29 +16,34 @@ namespace StackOverflowTagServer
             this.questions = questions;
         }
 
-        internal void ValidateTags(Dictionary<string, int[]> tagsToCheck, Func<Question, Question, bool> checker)
+        internal void ValidateItems(Dictionary<string, IEnumerable<int>> itemsToCheck,
+                                    Func<Question, Question, bool> checker,
+                                    string info,
+                                    int[] questionLookup = null)
         {
-            foreach (var tag in tagsToCheck)
+            var timer = Stopwatch.StartNew();
+            var globalCounter = 0;
+            foreach (var item in itemsToCheck)
             {
                 Question previous = null;
                 var counter = 0;
-                foreach (var id in tag.Value)
+                var tag = item.Key;
+                foreach (var id in item.Value)
                 {
-                    var current = questions[id];
+                    Question current = questionLookup == null ? questions[id] : questions[questionLookup[id]];
                     if (previous != null)
                     {
                         var result = checker(current, previous);
 
                         if (!result)
                         {
-                            Logger.LogStartupMessage("Failed with Id {0}, Tag {1}, checker() returned false", id, tag.Key);
+                            Logger.LogStartupMessage("Failed with Id {0}, Tag {1}, checker() returned false", id, tag);
                             break;
                         }
 
-                        if (tag.Key != TagServer.ALL_TAGS_KEY &&
-                            current.Tags.Any(t => t == tag.Key) == false)
+                        if (tag != TagServer.ALL_TAGS_KEY && current.Tags.Any(t => t == tag) == false)
                         {
-                            Logger.LogStartupMessage("Failed with Id {0}, Expected Tag {1}, Got Tags {2}", id, tag.Key, string.Join(", ", current.Tags));
+                            Logger.LogStartupMessage("Failed with Id {0}, Expected Tag {1}, Got Tags {2}", id, tag, string.Join(", ", current.Tags));
                             break;
                         }
                     }
@@ -44,9 +51,15 @@ namespace StackOverflowTagServer
                     previous = current;
                     counter++;
                 }
-                if (counter != tag.Value.Count())
-                    Logger.LogStartupMessage("ERROR - Tag {0}, Checked {1} items, Expected to Check {2} items", tag.Key, counter, tag.Value.Count());
+
+                globalCounter += counter;
+                if (counter != item.Value.Count())
+                    Logger.LogStartupMessage("ERROR - Tag {0}, Checked {1} items, Expected to Check {2} items", tag, counter, item.Value.Count());
             }
+            timer.Stop();
+
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to SUCCESSFULLY validate {2:N0} items -> {3}",
+                                     timer.Elapsed, timer.ElapsedMilliseconds, globalCounter, info);
         }
     }
 }

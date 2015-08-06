@@ -11,6 +11,7 @@ using System.Linq;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 using TagByQueryBitMapIndex = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
+using Ewah;
 
 namespace StackOverflowTagServer
 {
@@ -425,11 +426,11 @@ namespace StackOverflowTagServer
             //var tagsToUse = GetTagsToUseForBitMapIndexes(minQuestionsPerTag: 50000); // 48 Tags with MORE than 50,000 questions
             foreach (var tagToUse in tagsToUse)
             {
-                tagsByAnswerCountBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
-                tagsByCreationDateBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
-                tagsByLastActivityDateBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
-                tagsByScoreBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
-                tagsByViewCountBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                tagsByAnswerCountBitMapIndex.Add(tagToUse, new EwahCompressedBitArray());
+                tagsByCreationDateBitMapIndex.Add(tagToUse, new EwahCompressedBitArray());
+                tagsByLastActivityDateBitMapIndex.Add(tagToUse, new EwahCompressedBitArray());
+                tagsByScoreBitMapIndex.Add(tagToUse, new EwahCompressedBitArray());
+                tagsByViewCountBitMapIndex.Add(tagToUse, new EwahCompressedBitArray());
             }
 
             GC.Collect(2, GCCollectionMode.Forced);
@@ -552,19 +553,65 @@ namespace StackOverflowTagServer
         {
             var validator = new Validator(questions);
             var validationTimer = Stopwatch.StartNew();
-            validator.ValidateTags(GetTagLookupForQueryType(QueryType.LastActivityDate), (qu, prev) => qu.LastActivityDate <= prev.LastActivityDate);
-            validator.ValidateTags(GetTagLookupForQueryType(QueryType.CreationDate), (qu, prev) => Nullable.Compare<DateTime>(qu.CreationDate, prev.CreationDate) <= 0);
-            validator.ValidateTags(GetTagLookupForQueryType(QueryType.Score), (qu, prev) => Nullable.Compare(qu.Score, prev.Score) <= 0);
-            validator.ValidateTags(GetTagLookupForQueryType(QueryType.ViewCount), (qu, prev) => Nullable.Compare(qu.ViewCount, prev.ViewCount) <= 0);
-            validator.ValidateTags(GetTagLookupForQueryType(QueryType.AnswerCount), (qu, prev) => Nullable.Compare(qu.AnswerCount, prev.AnswerCount) <= 0);
+
+            validator.ValidateItems(GetTagLookupForQueryType(QueryType.LastActivityDate).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => qu.LastActivityDate <= prev.LastActivityDate,
+                                    "Tags-" + QueryType.LastActivityDate);
+
+            validator.ValidateItems(GetTagLookupForQueryType(QueryType.CreationDate).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => qu.CreationDate <= prev.CreationDate,
+                                    "Tags-" + QueryType.CreationDate);
+
+            validator.ValidateItems(GetTagLookupForQueryType(QueryType.Score).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.Score, prev.Score) <= 0,
+                                    "Tags-" + QueryType.Score);
+
+            validator.ValidateItems(GetTagLookupForQueryType(QueryType.ViewCount).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.ViewCount, prev.ViewCount) <= 0,
+                                    "Tags-" + QueryType.ViewCount);
+
+            validator.ValidateItems(GetTagLookupForQueryType(QueryType.AnswerCount).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.AnswerCount, prev.AnswerCount) <= 0,
+                                    "Tags-" + QueryType.AnswerCount);
+
             validationTimer.Stop();
-            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to VALIDATE all the {2:N0} arrays\n",
-                  validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to VALIDATE the {2:N0} arrays\n",
+                                     validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
         }
 
         private void ValidateBitMapIndexOrdering()
         {
-            // TODO Complete ValidateBitMapIndexOrdering()
+            var validator = new Validator(questions);
+            var validationTimer = Stopwatch.StartNew();
+
+            validator.ValidateItems(GetTagBitMapIndexForQueryType(QueryType.LastActivityDate).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => qu.LastActivityDate <= prev.LastActivityDate,
+                                    "BitMaps-" + QueryType.LastActivityDate,
+                                    questionLookup: GetTagLookupForQueryType(QueryType.LastActivityDate)[ALL_TAGS_KEY]);
+
+            validator.ValidateItems(GetTagBitMapIndexForQueryType(QueryType.CreationDate).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => qu.CreationDate <= prev.CreationDate,
+                                    "BitMaps-" + QueryType.CreationDate,
+                                    questionLookup: GetTagLookupForQueryType(QueryType.CreationDate)[ALL_TAGS_KEY]);
+
+            validator.ValidateItems(GetTagBitMapIndexForQueryType(QueryType.Score).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.Score, prev.Score) <= 0,
+                                    "BitMaps-" + QueryType.Score,
+                                    questionLookup: GetTagLookupForQueryType(QueryType.Score)[ALL_TAGS_KEY]);
+
+            validator.ValidateItems(GetTagBitMapIndexForQueryType(QueryType.ViewCount).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.ViewCount, prev.ViewCount) <= 0,
+                                    "BitMaps-" + QueryType.ViewCount,
+                                    questionLookup: GetTagLookupForQueryType(QueryType.ViewCount)[ALL_TAGS_KEY]);
+
+            validator.ValidateItems(GetTagBitMapIndexForQueryType(QueryType.AnswerCount).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.AnswerCount, prev.AnswerCount) <= 0,
+                                    "BitMaps-" + QueryType.AnswerCount,
+                                    questionLookup: GetTagLookupForQueryType(QueryType.AnswerCount)[ALL_TAGS_KEY]);
+
+            validationTimer.Stop();
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to VALIDATE all the {2:N0} Bit Map Indexes\n",
+                                     validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
         }
 
         public class TagWithPositions
