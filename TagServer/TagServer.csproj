@@ -122,6 +122,7 @@
     <Compile Include="DataStructures\TagInfo.cs" />
     <Compile Include="Querying\QueryResult.cs" />
     <Compile Include="Results.cs" />
+    <Compile Include="Serialisation.cs" />
     <Compile Include="TagServer.cs" />
     <Compile Include="Querying\QueryTester.cs" />
     <Compile Include="Utils.cs" />
