@@ -293,23 +293,37 @@ namespace StackOverflowTagServer
         private Dictionary<string, TagWithPositions> CreateTagGroupings()
         {
             var tagGroupingTimer = Stopwatch.StartNew();
-            // TODO Could **possibly** optimise this by doing it without LINQ, or maybe
-            // just use LINQ Optimiser to do it for us (it currently takes 30 seconds)
-            var groupedTags = questions.SelectMany((qu, n) => qu.Tags.Select(t => new
-                                                                {
-                                                                    Tag = t,
-                                                                    Position = n
-                                                                }),
-                                                   (qu, tag) => tag)
-                                       .ToLookup(x => x.Tag)
-                                       .Select(x => new TagWithPositions()
-                                                    {
-                                                        Tag = x.Key,
-                                                        Count = x.Count(),
-                                                        Positions = x.Select(y => y.Position).ToArray()
-                                                    })
-                                       .OrderByDescending(x => x.Count)
-                                       .ToDictionary(x => x.Tag);
+            var tempGroupedTags = new Dictionary<string, List<int>>();
+            var position = 0;
+            foreach (var qu in questions)
+            {
+                foreach (var tag in qu.Tags)
+                {
+                    if (tempGroupedTags.ContainsKey(tag) == false)
+                    {
+                        var tagWithPositions = new List<int>();
+                        tagWithPositions.Add(position);
+                        tempGroupedTags.Add(tag, tagWithPositions);
+                    }
+                    else
+                    {
+                        tempGroupedTags[tag].Add(position);
+                    }
+                }
+                position++;
+            }
+
+            Dictionary<string, TagWithPositions> groupedTags = new Dictionary<string, TagWithPositions>();
+            foreach (var item in tempGroupedTags.OrderByDescending(x => x.Value.Count))
+            {
+                var tagWithPositions = new TagWithPositions
+                                            {
+                                                Tag = item.Key,
+                                                Positions = item.Value.ToArray(),
+                                                Count = item.Value.Count
+                                            };
+                groupedTags.Add(item.Key, tagWithPositions);
+            }
 
             // We end up with this Dictionary,
             // where the numbers are the array indexes of the questions in the rawQuestions array
