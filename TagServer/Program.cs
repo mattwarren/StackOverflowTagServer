@@ -8,8 +8,8 @@ using System.Linq;
 using System.Runtime;
 
 using HashSet = StackOverflowTagServer.CLR.HashSet<string>;
-using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 using NGrams = System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>;
+using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 // ReSharper disable LocalizableElement
 namespace StackOverflowTagServer
@@ -23,17 +23,11 @@ namespace StackOverflowTagServer
             var folder = @"C:\Users\warma11\Downloads\__GitHub__\StackOverflowTagServer\BinaryData\";
             var filename = @"Questions-NEW.bin";
 
-            // This test doesn't need any "real" data (questions, tags, etc), so we can run it straight away"
-            //TagServer.TestBitSets(folder);
-            //return;
-
             var startupTimer = Stopwatch.StartNew();
             var rawQuestions = TagServer.GetRawQuestionsFromDisk(folder, filename);
 
             TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
             //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
-
-            //tagServer.TestBitSetsOnDeserialisedQuestionData();
 
             //PrintQuestionStats(rawQuestions);
             //PrintTagStats(tagServer.AllTags);

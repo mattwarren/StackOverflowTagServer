@@ -9,22 +9,18 @@ using System.IO;
 using System.Linq;
 
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
-using TagByQueryLookupBitSet = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
+using TagByQueryBitMapIndex = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 namespace StackOverflowTagServer
 {
     public class TagServer
     {
-        public delegate void LogAction(string format, params object[] args);
-
         private readonly TagLookup allTags;
         public TagLookup AllTags { get { return allTags; } }
 
         private readonly List<Question> questions;
         public List<Question> Questions { get { return questions; } }
-
-
 
         /// <summary> _ALL_TAGS_ </summary>
         public static string ALL_TAGS_KEY = "_ALL_TAGS_";
@@ -38,16 +34,35 @@ namespace StackOverflowTagServer
         private readonly TagByQueryLookup tagsByScore;
         private readonly TagByQueryLookup tagsByViewCount;
 
-        // GetTagBitSetForQueryType(QueryType type) maps these Dictionaries to a QueryType (enum)
-        private readonly TagByQueryLookupBitSet tagsByAnswerCountBitSet;
-        private readonly TagByQueryLookupBitSet tagsByCreationDateBitSet;
-        private readonly TagByQueryLookupBitSet tagsByLastActivityDateBitSet;
-        private readonly TagByQueryLookupBitSet tagsByScoreBitSet;
-        private readonly TagByQueryLookupBitSet tagsByViewCountBitSet;
+        // GetTagBitMapIndexForQueryType(QueryType type) maps these Dictionaries to a QueryType (enum)
+        private readonly TagByQueryBitMapIndex tagsByAnswerCountBitMapIndex;
+        private readonly TagByQueryBitMapIndex tagsByCreationDateBitMapIndex;
+        private readonly TagByQueryBitMapIndex tagsByLastActivityDateBitMapIndex;
+        private readonly TagByQueryBitMapIndex tagsByScoreBitMapIndex;
+        private readonly TagByQueryBitMapIndex tagsByViewCountBitMapIndex;
 
         private readonly QueryProcessor queryProcessor;
 
         private readonly ComplexQueryProcessor complexQueryProcessor;
+
+        public static List<Question> GetRawQuestionsFromDisk(string folder, string filename)
+        {
+            List<Question> rawQuestions;
+            var fileReadTimer = Stopwatch.StartNew();
+            Logger.LogStartupMessage("DE-serialising the Stack Overflow Questions from the disk....");
+            using (var file = File.OpenRead(Path.Combine(folder, filename)))
+            {
+                rawQuestions = Serializer.Deserialize<List<Question>>(file);
+            }
+            fileReadTimer.Stop();
+
+            GC.Collect(2, GCCollectionMode.Forced);
+            var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
+            Logger.LogStartupMessage("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from disk - Using {2:N2} MB ({3:N2} GB) of memory\n",
+                fileReadTimer.Elapsed, rawQuestions.Count, memoryUsed, memoryUsed / 1024.0);
+
+            return rawQuestions;
+        }
 
         /// <summary>
         /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor <see cref="TagServer(List{Question})" />
@@ -63,15 +78,15 @@ namespace StackOverflowTagServer
                 var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
                 Serialisation.SerialiseToDisk(tagLookupFileName, intermediateFilesFolder, tagServer.GetTagLookupForQueryType(type));
 
-                var bitMapIndex = tagServer.GetTagBitSetForQueryType(type);
+                var bitMapIndex = tagServer.GetTagBitMapIndexForQueryType(type);
                 if (bitMapIndex.Count == 0)
                     continue;
 
-                var bitMapIndexFileName = String.Format("intermediate-Compressed-BitMap-{0}.bin", type);
+                var bitMapIndexFileName = String.Format("intermediate-BitMap-{0}.bin", type);
                 Serialisation.SerialiseBitMapIndexToDisk(bitMapIndexFileName, intermediateFilesFolder, bitMapIndex);
 
                 // Sanity-check, de-serialise the data we've just written to disk
-                Serialisation.SerialiseBitMapIndexFromDisk(bitMapIndexFileName, intermediateFilesFolder);
+                Serialisation.DeserialiseFromDisk(bitMapIndexFileName, intermediateFilesFolder);
 
                 Logger.LogStartupMessage();
             }
@@ -82,6 +97,44 @@ namespace StackOverflowTagServer
             Logger.LogStartupMessage("\nTook {0} (in TOTAL) to serialise the intermediate data TO disk\n", serializeTimer.Elapsed);
 
             return tagServer;
+        }
+
+        /// <summary>
+        /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor
+        /// <see cref="TagServer(List{Question}, TagLookup, Dictionary{QueryType, TagByQueryLookup}, Dictionary{QueryType, TagByQueryBitMapIndex})"/>
+        /// </summary>
+        public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder)
+        {
+            var deserializeTimer = Stopwatch.StartNew();
+            Logger.LogStartupMessage("Deserialisation folder: {0}", intermediateFilesFolder);
+            var queryTypes = (QueryType[])Enum.GetValues(typeof(QueryType));
+            var intermediateLookups = new Dictionary<QueryType, TagByQueryLookup>(queryTypes.Length);
+            var intermediateBitMapIndexes = new Dictionary<QueryType, TagByQueryBitMapIndex>(queryTypes.Length);
+            foreach (QueryType type in queryTypes)
+            {
+                var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
+                var tempLookup = Serialisation.DeserialiseFromDisk<TagByQueryLookup>(tagLookupFileName, intermediateFilesFolder);
+                intermediateLookups.Add(type, tempLookup);
+                Logger.LogStartupMessage("{0,20} contains {1:N0} Tag Lookups", type, tempLookup.Count);
+
+                var bitMapIndexFileName = String.Format("intermediate-BitMap-{0}.bin", type);
+                var tempBitMapIndexes = Serialisation.DeserialiseFromDisk(bitMapIndexFileName, intermediateFilesFolder);
+                Logger.LogStartupMessage("{0,20} contains {1:N0} Tag BitMap Indexes", type, tempBitMapIndexes.Count);
+
+                Logger.LogStartupMessage();
+            }
+            // Now fetch from disk the AllTags Lookup, Tag -> Count (i.e. "C#" -> 579,321, "Java" -> 560,432)
+            var allTags = Serialisation.DeserialiseFromDisk<TagLookup>(AllTagsFileName, intermediateFilesFolder);
+            deserializeTimer.Stop();
+            Logger.LogStartupMessage("\nTook {0} (in TOTAL) to DE-serialise the intermediate data FROM disk\n", deserializeTimer.Elapsed);
+
+            return new TagServer(rawQuestions, allTags, intermediateLookups, intermediateBitMapIndexes);
+        }
+
+        public int TotalCount(QueryType type, string tag)
+        {
+            TagByQueryLookup queryInfo = GetTagLookupForQueryType(type);
+            return queryInfo[tag].Length;
         }
 
         /// <summary>
@@ -105,11 +158,11 @@ namespace StackOverflowTagServer
             tagsByViewCount = new TagByQueryLookup(groupedTags.Count);
 
             // These have to be initialised in the ctor, so they can remain readonly
-            tagsByAnswerCountBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-            tagsByCreationDateBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-            tagsByLastActivityDateBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-            tagsByScoreBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
-            tagsByViewCountBitSet = new TagByQueryLookupBitSet(groupedTags.Count);
+            tagsByAnswerCountBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
+            tagsByCreationDateBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
+            tagsByLastActivityDateBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
+            tagsByScoreBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
+            tagsByViewCountBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
 
             CreateSortedLists(groupedTags, useAlternativeMethod: true);
 
@@ -117,62 +170,12 @@ namespace StackOverflowTagServer
             CreateBitMapIndexes(groupedTags);
             Logger.LogStartupMessage(new string('#', Console.WindowWidth));
 
-            //ValidateTagOrdering();
-            //ValidateBitSetOrdering();
+            ValidateTagOrdering();
+            ValidateBitMapIndexOrdering();
 
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             Logger.LogStartupMessage("After TagServer created - Using {0:N2} MB ({1:N2} GB) of memory in total\n", mbUsed, mbUsed / 1024.0);
-        }
-
-        public static List<Question> GetRawQuestionsFromDisk(string folder, string filename)
-        {
-            List<Question> rawQuestions;
-            var fileReadTimer = Stopwatch.StartNew();
-            Logger.LogStartupMessage("DE-serialising the Stack Overflow Questions from the disk....");
-            using (var file = File.OpenRead(Path.Combine(folder, filename)))
-            {
-                rawQuestions = Serializer.Deserialize<List<Question>>(file);
-            }
-            fileReadTimer.Stop();
-
-            GC.Collect(2, GCCollectionMode.Forced);
-            var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Logger.LogStartupMessage("Took {0} to DE-serialise {1:N0} Stack Overflow Questions from disk - Using {2:N2} MB ({3:N2} GB) of memory\n",
-                fileReadTimer.Elapsed, rawQuestions.Count, memoryUsed, memoryUsed / 1024.0);
-
-            return rawQuestions;
-        }
-
-        /// <summary>
-        /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor
-        /// <see cref="TagServer(List{Question}, TagLookup, Dictionary{QueryType, TagByQueryLookup}, Dictionary{QueryType, TagByQueryLookupBitSet})"/>
-        /// </summary>
-        public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder)
-        {
-            var deserializeTimer = Stopwatch.StartNew();
-            Logger.LogStartupMessage("Deserialisation folder: {0}", intermediateFilesFolder);
-            var queryTypes = (QueryType[])Enum.GetValues(typeof(QueryType));
-            var intermediateLookups = new Dictionary<QueryType, TagByQueryLookup>(queryTypes.Length);
-            var intermediateBitSets = new Dictionary<QueryType, TagByQueryLookupBitSet>(queryTypes.Length);
-            foreach (QueryType type in queryTypes)
-            {
-                var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
-                var tempLookup = Serialisation.DeserialiseFromDisk<TagByQueryLookup>(tagLookupFileName, intermediateFilesFolder);
-                intermediateLookups.Add(type, tempLookup);
-                Logger.LogStartupMessage("{0,20} contains {1:N0} Tag Lookups", type, tempLookup.Count);
-
-                var bitSetFileName = String.Format("intermediate-CompressedBitSet-{0}.bin", type);
-                var tempBitSet = Serialisation.DeserialiseFromDisk<TagByQueryLookupBitSet>(bitSetFileName, intermediateFilesFolder);
-                intermediateBitSets.Add(type, tempBitSet);
-                Logger.LogStartupMessage("{0,20} contains {1:N0} Tag BitSets", type, tempBitSet.Count);
-            }
-            // Now fetch from disk the AllTags Lookup, Tag -> Count (i.e. "C#" -> 579,321, "Java" -> 560,432)
-            var allTags = Serialisation.DeserialiseFromDisk<TagLookup>(AllTagsFileName, intermediateFilesFolder);
-            deserializeTimer.Stop();
-            Logger.LogStartupMessage("\nTook {0} (in TOTAL) to DE-serialise the intermediate data FROM disk\n", deserializeTimer.Elapsed);
-
-            return new TagServer(rawQuestions, allTags, intermediateLookups, intermediateBitSets);
         }
 
         /// <summary>
@@ -180,7 +183,7 @@ namespace StackOverflowTagServer
         /// </summary>
         private TagServer(List<Question> questionsList, TagLookup allTags,
                           Dictionary<QueryType, TagByQueryLookup> intermediateLookups,
-                          Dictionary<QueryType, TagByQueryLookupBitSet> intermediateBitSets)
+                          Dictionary<QueryType, TagByQueryBitMapIndex> intermediateBitMapIndexes)
         {
             questions = questionsList;
             queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
@@ -195,92 +198,19 @@ namespace StackOverflowTagServer
             tagsByViewCount = intermediateLookups[QueryType.ViewCount];
 
             // These have to be initialised in the ctor, so they can remain readonly
-            tagsByAnswerCountBitSet = intermediateBitSets[QueryType.AnswerCount];
-            tagsByCreationDateBitSet = intermediateBitSets[QueryType.CreationDate];
-            tagsByLastActivityDateBitSet = intermediateBitSets[QueryType.LastActivityDate];
-            tagsByScoreBitSet = intermediateBitSets[QueryType.Score];
-            tagsByViewCountBitSet = intermediateBitSets[QueryType.ViewCount];
+            tagsByAnswerCountBitMapIndex = intermediateBitMapIndexes[QueryType.AnswerCount];
+            tagsByCreationDateBitMapIndex = intermediateBitMapIndexes[QueryType.CreationDate];
+            tagsByLastActivityDateBitMapIndex = intermediateBitMapIndexes[QueryType.LastActivityDate];
+            tagsByScoreBitMapIndex = intermediateBitMapIndexes[QueryType.Score];
+            tagsByViewCountBitMapIndex = intermediateBitMapIndexes[QueryType.ViewCount];
 
-            // This takes a while, maybe don't do it when using Intermediate results (that have already has this check?)
+            // This takes a while, maybe don't do it when using Intermediate results (that have already had this check done when they were created)
             //ValidateTagOrdering();
-            //ValidateBitSetOrdering();
+            //ValidateBitMapIndexOrdering();
 
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             Logger.LogStartupMessage("After TagServer created - Using {0:N2} MB ({1:N2} GB) of memory in total\n", mbUsed, mbUsed / 1024.0);
-        }
-
-        public int TotalCount(QueryType type, string tag)
-        {
-            TagByQueryLookup queryInfo = GetTagLookupForQueryType(type);
-            return queryInfo[tag].Length;
-        }
-
-        private static TagByQueryLookupBitSet CreateBitSets(int numBitSetsToCreate, int numItems, int jumpsPerLoop)
-        {
-            var memoryUsageBefore = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            var timer = Stopwatch.StartNew();
-            var dictionaryBitSet = new TagByQueryLookupBitSet();
-            var numBitsSet = 0;
-            for (int i = 0; i < numBitSetsToCreate; i++)
-            {
-                var bitMapIndex = new Ewah.EwahCompressedBitArray();
-                numBitsSet = 0;
-                for (int j = i; j < numItems; j += jumpsPerLoop)
-                {
-                    bitMapIndex.Set(j);
-                    numBitsSet++;
-                    // TODO work out a better way of doing this sanity-check
-                    //if (bitSet[j] == false)
-                    //    Logger.LogStartupMessage("ERROR as posn[{0}] in BitMap Index[{1}]", j, i);
-                }
-                dictionaryBitSet.Add(i.ToString(), bitMapIndex);
-            }
-            timer.Stop();
-            Logger.LogStartupMessage("\nTook {0:N2} msecs to create {1} BitSets, each with {2:N0} individual Bits that have been set",
-                                     timer.Elapsed.TotalMilliseconds, numBitSetsToCreate, numBitsSet);
-
-            var memoryUsageAfter = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Logger.LogStartupMessage("Using {0:N2} MB", memoryUsageAfter - memoryUsageBefore);
-
-            return dictionaryBitSet;
-        }
-
-        internal void TestBitSetsOnDeserialisedQuestionData()
-        {
-            //var bitSetTimer = Stopwatch.StartNew();
-            //var byAnswerCount = GetTagBitSetForQueryType(QueryType.AnswerCount);
-            //var cSharp = byAnswerCount["c#"];
-            //var jQuery = byAnswerCount["jquery"];
-            //var takeValue = 3; // 10; // for hex
-            //var skipValue = 5;
-            //string formatString = "X8", spacer = " ";
-
-            ////Logger.Log("cSharp:        {0}",
-            ////           //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
-            ////           String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
-            ////Logger.Log("jQuery:        {0}",
-            ////           //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
-            ////            String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
-
-            //jQuery.Not(); // Edits in-place, for real queries we NEED to make a copy
-            //              //Logger.Log("NOT jQuery:    {0}",
-            //              //           //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
-            //              //           String.Join(spacer, jQuery.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
-
-            //cSharp.Or(jQuery); // Edits in-place, for real queries we NEED to make a copy
-            //                   //Logger.Log("cSharp OR (NOT jQuery)");
-
-            ////cSharp.And(jQuery); // Edits in-place, for real queries we NEED to make a copy
-            ////Logger.Log("cSharp AND (NOT jQuery)");
-
-            ////Logger.Log("cSharp Result: {0}",
-            ////           //String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => i.ToString(formatString))),
-            ////           String.Join(spacer, cSharp.InternalArray.Skip(skipValue).Take(takeValue).Select(i => Convert.ToString(i, 2).PadLeft(32, '0'))));
-
-            //bitSetTimer.Stop();
-
-            //Logger.Log("Took {0} ({1:N0} ms) to do C# Or (Not jQuery)\n", bitSetTimer.Elapsed, bitSetTimer.ElapsedMilliseconds);
         }
 
         #region QueryApiPassedThruToQueryProcessor
@@ -341,22 +271,22 @@ namespace StackOverflowTagServer
             }
         }
 
-        private TagByQueryLookupBitSet GetTagBitSetForQueryType(QueryType type)
+        private TagByQueryBitMapIndex GetTagBitMapIndexForQueryType(QueryType type)
         {
             switch (type)
             {
                 case QueryType.LastActivityDate:
-                    return tagsByLastActivityDateBitSet;
+                    return tagsByLastActivityDateBitMapIndex;
                 case QueryType.CreationDate:
-                    return tagsByCreationDateBitSet;
+                    return tagsByCreationDateBitMapIndex;
                 case QueryType.Score:
-                    return tagsByScoreBitSet;
+                    return tagsByScoreBitMapIndex;
                 case QueryType.ViewCount:
-                    return tagsByViewCountBitSet;
+                    return tagsByViewCountBitMapIndex;
                 case QueryType.AnswerCount:
-                    return tagsByAnswerCountBitSet;
+                    return tagsByAnswerCountBitMapIndex;
                 default:
-                    throw new InvalidOperationException(string.Format("GetTagBitSetForQueryType - Invalid query type {0}", (int)type));
+                    throw new InvalidOperationException(string.Format("GetTagBitMapIndexForQueryType - Invalid query type {0}", (int)type));
             }
         }
 
@@ -401,7 +331,7 @@ namespace StackOverflowTagServer
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to group all the tags - Using {2:N2} MB ({3:N2} GB) of memory\n",
-                tagGroupingTimer.Elapsed, tagGroupingTimer.ElapsedMilliseconds, mbUsed, mbUsed / 1024.0);
+                                     tagGroupingTimer.Elapsed, tagGroupingTimer.ElapsedMilliseconds, mbUsed, mbUsed / 1024.0);
             return groupedTags;
         }
 
@@ -427,8 +357,8 @@ namespace StackOverflowTagServer
             GC.Collect(2, GCCollectionMode.Forced);
             var memoryUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
             Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to sort the {2:N0} arrays {3}- Using {4:N2} MB ({5:N2} GB) of memory\n",
-                sortingTimer.Elapsed, sortingTimer.ElapsedMilliseconds, groupedTags.Count * 5,
-                useAlternativeMethod ? "ALTERNATIVE method " : "", memoryUsed, memoryUsed / 1024.0);
+                                     sortingTimer.Elapsed, sortingTimer.ElapsedMilliseconds, groupedTags.Count * 5,
+                                     useAlternativeMethod ? "ALTERNATIVE method " : "", memoryUsed, memoryUsed / 1024.0);
         }
 
         private int[] CreateSortedArrayForTagAlternativeMethod(int[] positions, QueryType queryType)
@@ -464,7 +394,7 @@ namespace StackOverflowTagServer
             for (int i = 0; i < indices.Length; i++)
                 indices[i] = positions[i];
             // TODO it would be nicer if we could just sort in reverse order, but the overload doesn't seem to allow that!!
-            //var reverserComparer = new Comparison<int>((i1, i2) => i1.CompareTo(i2));
+            //var reverseComparer = new Comparison<int>((i1, i2) => i1.CompareTo(i2));
             Array.Sort(unsortedArray, indices);
             // We want all the items to be sorted descending, i.e. highest first
             Array.Reverse(indices);
@@ -473,24 +403,24 @@ namespace StackOverflowTagServer
 
         private void CreateBitMapIndexes(Dictionary<string, TagWithPositions> groupedTags)
         {
-            // First create all the BitSets we'll need, one per/Tag, per/QueryType
+            // First create all the BitMap Indexes we'll need, one per/Tag, per/QueryType
             var bitSetsTimer = Stopwatch.StartNew();
-            var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 0);
-            //var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 500); // 3,975 Tags with MORE than 500 questions
-            //var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 1000); // 2,397 Tags with MORE than 1,000 questions
-            //var tagsToUse = GetTagsToUseForBitSets(minQuestionsPerTag: 50000); // 48 Tags with MORE than 50,000 questions
+            var tagsToUse = GetTagsToUseForBitMapIndexes(minQuestionsPerTag: 0);
+            //var tagsToUse = GetTagsToUseForBitMapIndexes(minQuestionsPerTag: 500); // 3,975 Tags with MORE than 500 questions
+            //var tagsToUse = GetTagsToUseForBitMapIndexes(minQuestionsPerTag: 1000); // 2,397 Tags with MORE than 1,000 questions
+            //var tagsToUse = GetTagsToUseForBitMapIndexes(minQuestionsPerTag: 50000); // 48 Tags with MORE than 50,000 questions
             foreach (var tagToUse in tagsToUse)
             {
-                tagsByAnswerCountBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
-                tagsByCreationDateBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
-                tagsByLastActivityDateBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
-                tagsByScoreBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
-                tagsByViewCountBitSet.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                tagsByAnswerCountBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                tagsByCreationDateBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                tagsByLastActivityDateBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                tagsByScoreBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
+                tagsByViewCountBitMapIndex.Add(tagToUse, new Ewah.EwahCompressedBitArray());
             }
 
             GC.Collect(2, GCCollectionMode.Forced);
             var mbUsed = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Logger.LogStartupMessage("Created {0:N0} BitSets in total (one per/Tag, per/QueryType, for {1:N0} Tags) - Using {2:N2} MB ({3:N2} GB) of memory\n",
+            Logger.LogStartupMessage("Created {0:N0} BitMap Indexes in total (one per/Tag, per/QueryType, for {1:N0} Tags) - Using {2:N2} MB ({3:N2} GB) of memory\n",
                                      tagsToUse.Length * 5, tagsToUse.Length, mbUsed, mbUsed / 1024.0);
 
             PopulateBitMapIndexes();
@@ -518,7 +448,7 @@ namespace StackOverflowTagServer
             {
                 var questionsForQuery = GetTagLookupForQueryType(queryType)[ALL_TAGS_KEY];
                 var sanityCheck = new Dictionary<string, int>();
-                var bitSetsForQuery = GetTagBitSetForQueryType(queryType);
+                var bitSetsForQuery = GetTagBitMapIndexForQueryType(queryType);
                 if (bitSetsForQuery.Count == 0)
                     continue;
 
@@ -568,24 +498,24 @@ namespace StackOverflowTagServer
             // Ensure that the BitMap Indexes represent the entire count of questions and then shrink them to their smallest possible size
             foreach (var tagToUse in tagsToUse)
             {
-                tagsByAnswerCountBitSet[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
-                tagsByAnswerCountBitSet[tagToUse].Shrink();
+                tagsByAnswerCountBitMapIndex[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
+                tagsByAnswerCountBitMapIndex[tagToUse].Shrink();
 
-                tagsByCreationDateBitSet[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
-                tagsByCreationDateBitSet[tagToUse].Shrink();
+                tagsByCreationDateBitMapIndex[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
+                tagsByCreationDateBitMapIndex[tagToUse].Shrink();
 
-                tagsByLastActivityDateBitSet[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
-                tagsByLastActivityDateBitSet[tagToUse].Shrink();
+                tagsByLastActivityDateBitMapIndex[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
+                tagsByLastActivityDateBitMapIndex[tagToUse].Shrink();
 
-                tagsByScoreBitSet[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
-                tagsByScoreBitSet[tagToUse].Shrink();
+                tagsByScoreBitMapIndex[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
+                tagsByScoreBitMapIndex[tagToUse].Shrink();
 
-                tagsByViewCountBitSet[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
-                tagsByViewCountBitSet[tagToUse].Shrink();
+                tagsByViewCountBitMapIndex[tagToUse].SetSizeInBits(questions.Count, defaultvalue: false);
+                tagsByViewCountBitMapIndex[tagToUse].Shrink();
             }
         }
 
-        private string[] GetTagsToUseForBitSets(int minQuestionsPerTag)
+        private string[] GetTagsToUseForBitMapIndexes(int minQuestionsPerTag)
         {
             // There are     48 Tags with MORE than 50,000 questions
             // There are    113 Tags with MORE than 25,000 questions
@@ -606,7 +536,7 @@ namespace StackOverflowTagServer
 
         private void ValidateTagOrdering()
         {
-            var validator = new Validator(questions, (format, args) => Logger.LogStartupMessage(format, args));
+            var validator = new Validator(questions);
             var validationTimer = Stopwatch.StartNew();
             validator.ValidateTags(GetTagLookupForQueryType(QueryType.LastActivityDate), (qu, prev) => qu.LastActivityDate <= prev.LastActivityDate);
             validator.ValidateTags(GetTagLookupForQueryType(QueryType.CreationDate), (qu, prev) => Nullable.Compare<DateTime>(qu.CreationDate, prev.CreationDate) <= 0);
@@ -618,9 +548,9 @@ namespace StackOverflowTagServer
                   validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
         }
 
-        private void ValidateBitSetOrdering()
+        private void ValidateBitMapIndexOrdering()
         {
-            // TODO Complete ValidateBitSetOrdering()
+            // TODO Complete ValidateBitMapIndexOrdering()
         }
 
         public class TagWithPositions

@@ -202,8 +202,8 @@ namespace StackOverflowTagServer.Querying
             var bloomFilterCreationTimer = Stopwatch.StartNew();
             var bloomFilter = new SimpleBloomFilter(bloomFilterSize);
             bloomFilterCreationTimer.Stop();
-            Log("Took {0} ({1:N2} ms) to create the bloom filter with {2:N0} bits ({3:N2} bytes)",
-                bloomFilterCreationTimer.Elapsed, bloomFilterCreationTimer.Elapsed.TotalMilliseconds, bloomFilterSize, bloomFilterSize / 8);
+            Logger.Log("Took {0} ({1:N2} ms) to create the bloom filter with {2:N0} bits ({3:N2} bytes)",
+                       bloomFilterCreationTimer.Elapsed, bloomFilterCreationTimer.Elapsed.TotalMilliseconds, bloomFilterSize, bloomFilterSize / 8);
 #else
             var bloomFilter = new SimpleBloomFilter(bloomFilterSize);
 #endif
@@ -226,8 +226,8 @@ namespace StackOverflowTagServer.Querying
                         // It it's false, it's DEFINITELY false
                         // It it's true, it could really be false (false +ve)
                         var possiblyExists = bloomFilter.PossiblyExists(qu, debugInfo: true);
-                        Log("Bloom Filter.PossiblyExists - {0,8} = {1} ****", qu, possiblyExists);
-                        Log("  DebuggingHashSet.Contains - {0,8} = {1} ****", qu, debugging.Contains(qu));
+                        Logger.Log("Bloom Filter.PossiblyExists - {0,8} = {1} ****", qu, possiblyExists);
+                        Logger.Log("  DebuggingHashSet.Contains - {0,8} = {1} ****", qu, debugging.Contains(qu));
                     }
 #endif
                 }
@@ -244,8 +244,8 @@ namespace StackOverflowTagServer.Querying
                         if (debugging.Contains(b) == false)
                         {
                             var qu = questions[b];
-                            Log("FALSE +VE: {0,8}, PossiblyExists = {1}, debugging.Contains() = {2}, Id = {3,8}, Tags = {4}",
-                                b, possiblyExists, debugging.Contains(b), qu.Id, string.Join(",", qu.Tags));
+                            Logger.Log("FALSE +VE: {0,8}, PossiblyExists = {1}, debugging.Contains() = {2}, Id = {3,8}, Tags = {4}",
+                                       b, possiblyExists, debugging.Contains(b), qu.Id, string.Join(",", qu.Tags));
                         }
                         return false; // we can't use it
                     })
@@ -278,9 +278,9 @@ namespace StackOverflowTagServer.Querying
             foreach (var item in tests)
             {
                 var possiblyExists = bloomFilter.PossiblyExists(item, debugInfo: true);
-                Log("Bloom Filter.PossiblyExists - {0,8} = {1}", item, possiblyExists);
-                Log("  DebuggingHashSet.Contains - {0,8} = {1}", item, debugging.Contains(item));
-                Log("");
+                Logger.Log("Bloom Filter.PossiblyExists - {0,8} = {1}", item, possiblyExists);
+                Logger.Log("  DebuggingHashSet.Contains - {0,8} = {1}", item, debugging.Contains(item));
+                Logger.Log("");
             }
             // When the values in "tests" represent Question Id
             //var testResults = tests.Select(t => questions.First(qu => qu.Id == t))
@@ -288,7 +288,7 @@ namespace StackOverflowTagServer.Querying
             // When the values in "tests" represent array indexes, i.e. questions[x]
             var testResults = tests.Select(t => questions[t])
                                     .Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
-            Log("  {0}", string.Join("\n  ", testResults));
+            Logger.Log("  {0}", string.Join("\n  ", testResults));
 #endif
 
             return result;

@@ -8,12 +8,10 @@ namespace StackOverflowTagServer
     class Validator
     {
         private readonly List<Question> questions;
-        private readonly TagServer.LogAction Log;
 
-        public Validator(List<Question> questions, TagServer.LogAction log)
+        public Validator(List<Question> questions)
         {
             this.questions = questions;
-            this.Log = log;
         }
 
         internal void ValidateTags(Dictionary<string, int[]> tagsToCheck, Func<Question, Question, bool> checker)
@@ -31,14 +29,14 @@ namespace StackOverflowTagServer
 
                         if (!result)
                         {
-                            Log("Failed with Id {0}, Tag {1}, checker() returned false", id, tag.Key);
+                            Logger.LogStartupMessage("Failed with Id {0}, Tag {1}, checker() returned false", id, tag.Key);
                             break;
                         }
 
-                        if (tag.Key != TagServer.ALL_TAGS_KEY && 
+                        if (tag.Key != TagServer.ALL_TAGS_KEY &&
                             current.Tags.Any(t => t == tag.Key) == false)
                         {
-                            Log("Failed with Id {0}, Expected Tag {1}, Got Tags {2}", id, tag.Key, string.Join(", ", current.Tags));
+                            Logger.LogStartupMessage("Failed with Id {0}, Expected Tag {1}, Got Tags {2}", id, tag.Key, string.Join(", ", current.Tags));
                             break;
                         }
                     }
@@ -47,7 +45,7 @@ namespace StackOverflowTagServer
                     counter++;
                 }
                 if (counter != tag.Value.Count())
-                    Log("ERROR - Tag {0}, Checked {1} items, Expected to Check {2} items", tag.Key, counter, tag.Value.Count());
+                    Logger.LogStartupMessage("ERROR - Tag {0}, Checked {1} items, Expected to Check {2} items", tag.Key, counter, tag.Value.Count());
             }
         }
     }
