@@ -45,7 +45,7 @@ namespace StackOverflowTagServer.DataStructures
             int index1 = Math.Abs(HashThomasWang(item)) % size;
 #if DEBUG
             if (debugInfo)
-                Console.WriteLine("HashThomasWang - {0,8} = {1,8}, bitArray[{1,8}] = {2}", item, index1, bitArray[index1]);
+                Logger.Log("HashThomasWang - {0,8} = {1,8}, bitArray[{1,8}] = {2}", item, index1, bitArray[index1]);
 #endif
             if (bitArray[index1] == false)
                 return false;
@@ -53,7 +53,7 @@ namespace StackOverflowTagServer.DataStructures
             int index2 = Math.Abs(HashFNV1a(item)) % size;
 #if DEBUG
             if (debugInfo)
-                Console.WriteLine("     HashFNV1a - {0,8} = {1,8}, bitArray[{1,8}] = {2}", item, index2, bitArray[index2]);
+                Logger.Log("     HashFNV1a - {0,8} = {1,8}, bitArray[{1,8}] = {2}", item, index2, bitArray[index2]);
 #endif
             if (bitArray[index2] == false)
                 return false;

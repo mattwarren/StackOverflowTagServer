@@ -18,7 +18,7 @@ namespace StackOverflowTagServer
                 string line;
                 while ((line = fileStream.ReadLine()) != null)
                     leppieTags.Add(line);
-                //Console.WriteLine(string.Join(", ", tagsToExpand));
+                //Logger.Log(string.Join(", ", tagsToExpand));
             }
             return leppieTags;
         }

@@ -80,12 +80,5 @@ namespace StackOverflowTagServer.Querying
             if (pageSize < 1 || pageSize > 250)
                 throw new InvalidOperationException(string.Format("Invalid page size provided: {0}, only values from 1 to 250 are allowed", pageSize));
         }
-
-        protected static void Log(string format, params object[] args)
-        {
-            var msg = string.Format(format, args);
-            Console.WriteLine(msg);
-            Trace.WriteLine(msg);
-        }
     }
 }

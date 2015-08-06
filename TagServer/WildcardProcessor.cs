@@ -26,7 +26,7 @@ namespace StackOverflowTagServer
         /// <summary> The Word Anchor is a '^' character </summary>
         private static readonly char WordAnchor = '^';
 
-        internal static Trie<int> CreateTrie(TagLookup allTags)
+        public static Trie<int> CreateTrie(TagLookup allTags)
         {
             // From http://algs4.cs.princeton.edu/52trie/
             // 15. Substring matches.
@@ -40,7 +40,7 @@ namespace StackOverflowTagServer
             trie.AddRangeAllowDuplicates(allTags.Select(t => new TrieEntry<int>(Reverse(t.Key), TrieReverseTerminator)));
             trieSetupTimer.Stop();
 
-            Console.WriteLine("\nTook {0} ({1,6:N2} ms) to SETUP the Trie (ONE-OFF cost)", trieSetupTimer.Elapsed, trieSetupTimer.Elapsed.TotalMilliseconds);
+            Logger.LogStartupMessage("\nTook {0} ({1,6:N2} ms) to SETUP the Trie (ONE-OFF cost)", trieSetupTimer.Elapsed, trieSetupTimer.Elapsed.TotalMilliseconds);
 
             return trie;
         }
@@ -75,8 +75,8 @@ namespace StackOverflowTagServer
                 var expected = Math.Max(1, item.Tag.Length - N + 1 + 2);
                 if (expected != nGrams.Count)
                 {
-                    Console.WriteLine("n-grams (n={0}) for \"{1}\" (Got: {2}, Expected: {3}): {4} ",
-                                      N, item.Tag, nGrams.Count, expected, String.Join(", ", nGrams));
+                    Logger.LogStartupMessage("n-grams (n={0}) for \"{1}\" (Got: {2}, Expected: {3}): {4} ",
+                                             N, item.Tag, nGrams.Count, expected, String.Join(", ", nGrams));
                 }
 
                 foreach (var nGram in nGrams)
@@ -93,7 +93,8 @@ namespace StackOverflowTagServer
                 }
             }
             nGramsTimer.Stop();
-            Console.WriteLine("\nTook {0} ({1,6:N2} ms) to create {2:N0} n-grams (ONE-OFF cost)\n", nGramsTimer.Elapsed, nGramsTimer.Elapsed.TotalMilliseconds, allNGrams.Count);
+            Logger.LogStartupMessage("\nTook {0} ({1,6:N2} ms) to create {2:N0} n-grams (ONE-OFF cost)\n",
+                                     nGramsTimer.Elapsed, nGramsTimer.Elapsed.TotalMilliseconds, allNGrams.Count);
 
             return allNGrams;
         }
@@ -235,7 +236,7 @@ namespace StackOverflowTagServer
                 }
             }
 
-            Console.WriteLine("Took {0} ({1,6:N0} ms) for Trie expansion to do brute force searches", bruteForceTimer.Elapsed, bruteForceTimer.ElapsedMilliseconds);
+            Logger.Log("Took {0} ({1,6:N0} ms) for Trie expansion to do brute force searches", bruteForceTimer.Elapsed, bruteForceTimer.ElapsedMilliseconds);
 
             return expandedTags;
         }
@@ -330,17 +331,17 @@ namespace StackOverflowTagServer
                     }
                     //else
                     //{
-                    //    Console.WriteLine("False Positive, Tag: {0}, TagPattern: {1}, Searches: {2}",
-                    //                      tagMatch, tagPattern, String.Join(", ", searches));
+                    //    Logger.Log("False Positive, Tag: {0}, TagPattern: {1}, Searches: {2}",
+                    //               tagMatch, tagPattern, String.Join(", ", searches));
                     //}
                 }
             }
             //expandTagsTimer.Stop();
 
-            //Console.WriteLine("Took {0} ({1,6:N0} ms) in TOTAL, to expand to \"{2}\" to {3} Tags ({4} in total):",
-            //                  expandTagsTimer.Elapsed, expandTagsTimer.ElapsedMilliseconds, tagPattern, tagsAdded, expandedTags.Count);
-            //Console.WriteLine(String.Join(", ", expandedTags));
-            //Console.WriteLine();
+            //Logger.Log("Took {0} ({1,6:N0} ms) in TOTAL, to expand to \"{2}\" to {3} Tags ({4} in total):",
+            //           expandTagsTimer.Elapsed, expandTagsTimer.ElapsedMilliseconds, tagPattern, tagsAdded, expandedTags.Count);
+            //Logger.Log(String.Join(", ", expandedTags));
+            //Logger.Log();
 
             return tagsAdded > 0;
         }

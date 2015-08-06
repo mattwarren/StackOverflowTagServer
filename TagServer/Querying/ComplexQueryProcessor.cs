@@ -84,10 +84,10 @@ namespace StackOverflowTagServer.Querying
 
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
 
-            Log("REGULAR  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) REGULAR",
-                info.Tag, info.Operator, info.OtherTag, info.PageSize, info.Skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
-            Log("Got {0:} results in total, tag1 QueryCounter = {1:N0}, tag2 QueryCounter = {1:N0}",
-                result.Count(), tagCounter, otherTagCounter);
+            Logger.Log("REGULAR  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) REGULAR",
+                       info.Tag, info.Operator, info.OtherTag, info.PageSize, info.Skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+            Logger.Log("Got {0:} results in total, tag1 QueryCounter = {1:N0}, tag2 QueryCounter = {1:N0}",
+                       result.Count(), tagCounter, otherTagCounter);
 
             return new QueryResult
             {
@@ -114,7 +114,7 @@ namespace StackOverflowTagServer.Querying
             });
         }
 
-        class CounterWrapper
+        private class CounterWrapper
         {
             public CounterWrapper(int initialValue)
             {
@@ -159,11 +159,11 @@ namespace StackOverflowTagServer.Querying
 
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
 
-            Log("NO LINQ  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) NO LINQ",
-                info.Tag, info.Operator, info.OtherTag, info.PageSize, info.Skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
-            Log("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4} tags to be excluded)",
-                queryResult.Results.Count(), queryResult.BaseQueryCounter, queryResult.ItemsSkipped,
-                queryResult.ExcludedCounter, tagsToExclude != null ? tagsToExclude.Count.ToString("N0") : "NO");
+            Logger.Log("NO LINQ  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) NO LINQ",
+                       info.Tag, info.Operator, info.OtherTag, info.PageSize, info.Skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+            Logger.Log("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4} tags to be excluded)",
+                       queryResult.Results.Count(), queryResult.BaseQueryCounter, queryResult.ItemsSkipped,
+                       queryResult.ExcludedCounter, tagsToExclude != null ? tagsToExclude.Count.ToString("N0") : "NO");
 
             return new QueryResult
             {

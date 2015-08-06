@@ -33,11 +33,11 @@ namespace StackOverflowTagServer.Querying
 
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Log("Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms)",
-                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Logger.Log("Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms)",
+                           type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
             var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(", ", r.Tags)));
-            Log("  {0}\n", string.Join("\n  ", formattedResults));
+            Logger.Log("  {0}\n", string.Join("\n  ", formattedResults));
 
             return result;
         }
@@ -64,17 +64,17 @@ namespace StackOverflowTagServer.Querying
             gcInfo.UpdateCollectionInfo();
 
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
-            Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
+            Logger.Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - SLOW",
-                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Logger.Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - SLOW",
+                           type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            Log("Got {0} results", results.Count());
-            Log(gcInfo.ToString());
+            Logger.Log("Got {0} results", results.Count());
+            Logger.Log(gcInfo.ToString());
             //var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
             //Log("  {0}", string.Join("\n  ", formattedResults));
-            Log("");
+            Logger.Log("");
 
             return results;
         }
@@ -108,18 +108,18 @@ namespace StackOverflowTagServer.Querying
             timer.Stop();
             gcInfo.UpdateCollectionInfo();
 
-            Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
+            Logger.Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - FAST",
-                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Logger.Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - FAST",
+                           type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            Log("Got {0} results, {1:N0} items left in baseHashSet", results.Count(), baseHashSet.Count);
-            Log(gcInfo.ToString());
+            Logger.Log("Got {0} results, {1:N0} items left in baseHashSet", results.Count(), baseHashSet.Count);
+            Logger.Log(gcInfo.ToString());
             //var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
             //Log("  {0}", string.Join("\n  ", formattedResults));
-            Log("");
+            Logger.Log("");
 
             return results;
         }
@@ -165,18 +165,18 @@ namespace StackOverflowTagServer.Querying
             timer.Stop();
             gcInfo.UpdateCollectionInfo();
 
-            Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
+            Logger.Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - FAST ALT",
-                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Logger.Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - FAST ALT",
+                           type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
-            Log("Got {0} results ({1} in allResults), {2:N0} items in exclusions", results.Count(), allResults.Count, exclusions.Count);
-            Log(gcInfo.ToString());
+            Logger.Log("Got {0} results ({1} in allResults), {2:N0} items in exclusions", results.Count(), allResults.Count, exclusions.Count);
+            Logger.Log(gcInfo.ToString());
             //var formattedResults = results.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
             //Log("  {0}", string.Join("\n  ", formattedResults));
-            Log("");
+            Logger.Log("");
 
             return results;
         }
@@ -259,20 +259,20 @@ namespace StackOverflowTagServer.Querying
             timer.Stop();
             gcInfo.UpdateCollectionInfo();
 
-            Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
+            Logger.Log("Base Query: {0}, there are {1:N0} Excluded Tags", tag, excludedTags.Count);
             Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
             using (Utils.SetConsoleColour(Utils.GetColorForTimespan(timer.Elapsed)))
             {
-                Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - BLOOM",
-                    type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
+                Logger.Log("Boolean Query {0} against tag \"{1}\", pageSize = {2}, skip = {3}, took {4} ({5:N2} ms) - BLOOM",
+                           type, tag, pageSize, skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             }
             //Log("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes), Truthiness {2:N2}",
             //    result.Count(), bloomFilter.NumberOfItems, bloomFilter.Truthiness);
-            Log("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes)", result.Count(), bloomFilter.NumberOfItems);
-            Log(gcInfo.ToString());
+            Logger.Log("Got {0} results, Bloom Filter contains {1:N0} items (some could be dupes)", result.Count(), bloomFilter.NumberOfItems);
+            Logger.Log(gcInfo.ToString());
             //var formattedResults = result.Select(r => string.Format("Id: {0,8}, {1}: {2,4}, Tags: {3}, ", r.Id, type, fieldSelector(r), string.Join(",", r.Tags)));
             //Log("  {0}", string.Join("\n  ", formattedResults));
-            Log("");
+            Logger.Log("");
 
 #if DEBUG
             foreach (var item in tests)

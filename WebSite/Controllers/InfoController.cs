@@ -77,7 +77,7 @@ namespace Server.Controllers
                         { urlRoot + "/Wildcard/?wildcards=*c%23,c%23*,.net", "Show all the Tags that matches the given wildcards (comma seperated list, starts-with, end-with or contains only)" },
                     }.ToArray(),
                 },
-                SetupMessages = TagServer.Messages,
+                SetupMessages = Logger.Messages,
                 Top50Tags = tagServer.AllTags
                                      .Take(50),
                 Bottom50Tags = tagServer.AllTags

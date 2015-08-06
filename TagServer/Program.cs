@@ -18,7 +18,7 @@ namespace StackOverflowTagServer
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("IsServerGC: {0}, LatencyMode: {1}", GCSettings.IsServerGC, GCSettings.LatencyMode);
+            Logger.LogStartupMessage("IsServerGC: {0}, LatencyMode: {1}", GCSettings.IsServerGC, GCSettings.LatencyMode);
 
             var folder = @"C:\Users\warma11\Downloads\__GitHub__\StackOverflowTagServer\BinaryData\";
             var filename = @"Questions-NEW.bin";
@@ -42,7 +42,7 @@ namespace StackOverflowTagServer
 
             GC.Collect(2, GCCollectionMode.Forced);
             var totalMemory = GC.GetTotalMemory(true) / 1024.0 / 1024.0;
-            Console.WriteLine("Took {0} ({1,6:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL",
+            Logger.LogStartupMessage("Took {0} ({1,6:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL",
                               startupTimer.Elapsed, startupTimer.Elapsed.TotalMilliseconds, totalMemory, totalMemory / 1024.0);
 
             //RunComparisonQueries(tagServer);
@@ -62,31 +62,31 @@ namespace StackOverflowTagServer
 
             //RunSimpleQueries();
 
-            Console.WriteLine("Finished, press <ENTER> to exit");
+            Logger.LogStartupMessage("Finished, press <ENTER> to exit");
             Console.ReadLine();
         }
 
         private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, HashSet leppieExpandedTags)
         {
-            Console.WriteLine("\nThere are {0:N0} questions and {1:N0} tags in total", rawQuestions.Count, allTags.Count);
-            Console.WriteLine("Leppie {0:N0} tags with wildcards expand to {1:N0} tags in total", leppieTags.Count, leppieExpandedTags.Count);
+            Logger.LogStartupMessage("\nThere are {0:N0} questions and {1:N0} tags in total", rawQuestions.Count, allTags.Count);
+            Logger.LogStartupMessage("Leppie {0:N0} tags with wildcards expand to {1:N0} tags in total", leppieTags.Count, leppieExpandedTags.Count);
             var remainingTagsHashSet = new CLR.HashSet<string>(allTags.Keys);
             remainingTagsHashSet.ExceptWith(leppieExpandedTags);
-            Console.WriteLine("There are {0:N0} tags remaining, {0:N0} + {1:N0} = {2:N0} (Expected: {3:N0})",
+            Logger.LogStartupMessage("There are {0:N0} tags remaining, {0:N0} + {1:N0} = {2:N0} (Expected: {3:N0})",
                               remainingTagsHashSet.Count, leppieExpandedTags.Count,
                               remainingTagsHashSet.Count + leppieExpandedTags.Count, allTags.Count);
 
-            Console.WriteLine("Sanity checking excluded/included tags and questions...");
+            Logger.LogStartupMessage("Sanity checking excluded/included tags and questions...");
             var excludedQuestionCounter = rawQuestions.Count(question => question.Tags.Any(t => leppieExpandedTags.Contains(t)));
             var includedQuestionCounter = rawQuestions.Count(question => question.Tags.All(t => remainingTagsHashSet.Contains(t)));
-            Console.WriteLine("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})",
+            Logger.LogStartupMessage("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})",
                               leppieExpandedTags.Count, excludedQuestionCounter, rawQuestions.Count);
-            Console.WriteLine(
+            Logger.LogStartupMessage(
                 "{0:N0} remaining tags cover {1:N0} questions, {2:N0} + {3:N0} = {4:N0} (Expected: {5:N0})",
                 remainingTagsHashSet.Count, includedQuestionCounter,
                 includedQuestionCounter, excludedQuestionCounter,
                 includedQuestionCounter + excludedQuestionCounter, rawQuestions.Count);
-            Console.WriteLine();
+            Logger.LogStartupMessage();
         }
 
         private static HashSet ProcessTagsForFastLookup(TagLookup allTags, Trie<int> trie, NGrams nGrams, List<string> tagsToExpand)
@@ -111,39 +111,39 @@ namespace StackOverflowTagServer
             var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(allTags, tagsToExpand, nGrams);
             expandTagsRegexTimer.Stop();
 
-            Console.WriteLine("There are {0:N0} tags in total", allTags.Count);
-            Console.WriteLine("There are {0:N0} tags (raw) BEFORE expansion", tagsToExpand.Count);
-            Console.WriteLine("Expanded to {0:N0} tags (Contains),  took {1,8:N2} ms ({2})",
+            Logger.LogStartupMessage("There are {0:N0} tags in total", allTags.Count);
+            Logger.LogStartupMessage("There are {0:N0} tags (raw) BEFORE expansion", tagsToExpand.Count);
+            Logger.LogStartupMessage("Expanded to {0:N0} tags (Contains),  took {1,8:N2} ms ({2})",
                   expandTagsContains.Count, expandTagsContainsTimer.Elapsed.TotalMilliseconds, expandTagsContainsTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (VB),        took {1,8:N2} ms ({2})",
+            Logger.LogStartupMessage("Expanded to {0:N0} tags (VB),        took {1,8:N2} ms ({2})",
                             expandedTagsVB.Count, expandTagsVBTimer.Elapsed.TotalMilliseconds, expandTagsVBTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (Regex),     took {1,8:N2} ms ({2})",
+            Logger.LogStartupMessage("Expanded to {0:N0} tags (Regex),     took {1,8:N2} ms ({2})",
                             expandedTagsRegex.Count, expandTagsRegexTimer.Elapsed.TotalMilliseconds, expandTagsRegexTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (Trie),      took {1,8:N2} ms ({2})",
+            Logger.LogStartupMessage("Expanded to {0:N0} tags (Trie),      took {1,8:N2} ms ({2})",
                             expandedTagsTrie.Count, expandTagsTrieTimer.Elapsed.TotalMilliseconds, expandTagsTrieTimer.Elapsed);
-            Console.WriteLine("Expanded to {0:N0} tags (NGrams),    took {1,8:N2} ms ({2})",
+            Logger.LogStartupMessage("Expanded to {0:N0} tags (NGrams),    took {1,8:N2} ms ({2})",
                             expandedTagsNGrams.Count, expandedTagsNGramsTimer.Elapsed.TotalMilliseconds, expandedTagsNGramsTimer.Elapsed);
 
-            Console.WriteLine("\nIn Contains but not in Regex: " + string.Join(", ", expandTagsContains.Except(expandedTagsRegex)));
-            Console.WriteLine("\nIn Regex but not in Contains: " + string.Join(", ", expandedTagsRegex.Except(expandTagsContains)));
+            Logger.LogStartupMessage("\nIn Contains but not in Regex: " + string.Join(", ", expandTagsContains.Except(expandedTagsRegex)));
+            Logger.LogStartupMessage("\nIn Regex but not in Contains: " + string.Join(", ", expandedTagsRegex.Except(expandTagsContains)));
 
-            Console.WriteLine("\nIn Contains but not in VB: " + string.Join(", ", expandTagsContains.Except(expandedTagsVB)));
-            Console.WriteLine("\nIn VB but not in Contains: " + string.Join(", ", expandedTagsVB.Except(expandTagsContains)));
+            Logger.LogStartupMessage("\nIn Contains but not in VB: " + string.Join(", ", expandTagsContains.Except(expandedTagsVB)));
+            Logger.LogStartupMessage("\nIn VB but not in Contains: " + string.Join(", ", expandedTagsVB.Except(expandTagsContains)));
 
-            Console.WriteLine("\nIn Contains but not in Trie: " + string.Join(", ", expandTagsContains.Except(expandedTagsTrie)));
-            Console.WriteLine("\nIn Trie but not in Contains: " + string.Join(", ", expandedTagsTrie.Except(expandTagsContains)));
+            Logger.LogStartupMessage("\nIn Contains but not in Trie: " + string.Join(", ", expandTagsContains.Except(expandedTagsTrie)));
+            Logger.LogStartupMessage("\nIn Trie but not in Contains: " + string.Join(", ", expandedTagsTrie.Except(expandTagsContains)));
 
-            Console.WriteLine("\nIn Contains but not in NGrams: " + string.Join(", ", expandTagsContains.Except(expandedTagsNGrams)));
-            Console.WriteLine("\nIn NGrams but not in Contains: " + string.Join(", ", expandedTagsNGrams.Except(expandTagsContains)));
-            Console.WriteLine();
+            Logger.LogStartupMessage("\nIn Contains but not in NGrams: " + string.Join(", ", expandTagsContains.Except(expandedTagsNGrams)));
+            Logger.LogStartupMessage("\nIn NGrams but not in Contains: " + string.Join(", ", expandedTagsNGrams.Except(expandTagsContains)));
+            Logger.LogStartupMessage();
 
             var expandedTags = expandedTagsNGrams;
-            //Console.WriteLine(string.Join(", ", expandedTags));
+            //Logger.LogStartupMessage(string.Join(", ", expandedTags));
 
             // This is an error, we shouldn't have extra tags that aren't in the "allTags" list!!
             var extra = expandedTags.Except(allTags.Keys).ToList();
             if (extra.Count > 0)
-                Console.WriteLine("\nExtra Tags: " + string.Join(", ", extra) + "\n");
+                Logger.LogStartupMessage("\nExtra Tags: " + string.Join(", ", extra) + "\n");
 
             return expandedTags;
         }
@@ -166,7 +166,7 @@ namespace StackOverflowTagServer
         private static void RunAndOrNotComparisionQueries(TagServer tagServer, string tag1, string tag2, int pageSize)
         {
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\nComparison queries:\n\t\"{0}\" has {1:N0} questions\n\t\"{2}\" has {3:N0} questions",
+            Logger.LogStartupMessage("\nComparison queries:\n\t\"{0}\" has {1:N0} questions\n\t\"{2}\" has {3:N0} questions",
                               tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
             Console.ResetColor();
 
@@ -178,7 +178,7 @@ namespace StackOverflowTagServer
                 Results.AddHeaders("Skip Count", "Regular", "Regular", "Regular", "No LINQ", "No LINQ", "No LINQ");
 
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("\n{0} Comparison queries: {1} {0} {2}\n", query, tag1, tag2);
+                Logger.LogStartupMessage("\n{0} Comparison queries: {1} {0} {2}\n", query, tag1, tag2);
                 Console.ResetColor();
                 foreach (var skipCount in skipCounts)
                 {
@@ -224,7 +224,7 @@ namespace StackOverflowTagServer
             }
             amounts.Add(expandedTags.Count);
 
-            Console.WriteLine("\n\nVarying the number of \"Not Queries\"\n");
+            Logger.LogStartupMessage("\n\nVarying the number of \"Not Queries\"\n");
             var expandedTagsAsList = expandedTags.ToList();
             //while (true)
             {
@@ -232,7 +232,7 @@ namespace StackOverflowTagServer
                 {
                     var pageSize = 50;
                     var excludedTags = SelectNItemsFromList(expandedTagsAsList, count);
-                    //Console.WriteLine("Count={0}, excludedTags.Count={1} tags:{2}\n\n", count, excludedTags.Count, string.Join(", ", excludedTags));
+                    //Logger.LogStartupMessage("Count={0}, excludedTags.Count={1} tags:{2}\n\n", count, excludedTags.Count, string.Join(", ", excludedTags));
                     //continue;
 
                     //GC.Collect(2, GCCollectionMode.Forced);
@@ -255,7 +255,7 @@ namespace StackOverflowTagServer
                 }
             }
 
-            //Console.WriteLine("\n\nVarying the number of \"Skipped Pages\"\n");
+            //Logger.LogStartupMessage("\n\nVarying the number of \"Skipped Pages\"\n");
             ////for (decimal skip = (25.0m / 16.0m); skip <= 1600; skip *= 2)
             //for (decimal skip = (25.0m / 16.0m); skip <= 800; skip *= 2)
             //{
@@ -280,7 +280,7 @@ namespace StackOverflowTagServer
             //queryTester.TestAndOrNotQueries();
             //queryTester.TestQueries();
 
-            //Console.WriteLine("Finished, press <ENTER> to exit");
+            //Logger.LogStartupMessage("Finished, press <ENTER> to exit");
             //Console.ReadLine();
             //return;
 
@@ -300,30 +300,30 @@ namespace StackOverflowTagServer
         private static void PrintQuestionStats(List<Question> rawQuestions)
         {
             // For sanity checks!!
-            Console.WriteLine("Max LastActivityDate {0}", rawQuestions.Max(q => q.LastActivityDate));
-            Console.WriteLine("Min LastActivityDate {0}\n", rawQuestions.Min(q => q.LastActivityDate));
+            Logger.LogStartupMessage("Max LastActivityDate {0}", rawQuestions.Max(q => q.LastActivityDate));
+            Logger.LogStartupMessage("Min LastActivityDate {0}\n", rawQuestions.Min(q => q.LastActivityDate));
 
-            Console.WriteLine("Max CreationDate {0}", rawQuestions.Max(q => q.CreationDate));
-            Console.WriteLine("Min CreationDate {0}\n", rawQuestions.Min(q => q.CreationDate));
+            Logger.LogStartupMessage("Max CreationDate {0}", rawQuestions.Max(q => q.CreationDate));
+            Logger.LogStartupMessage("Min CreationDate {0}\n", rawQuestions.Min(q => q.CreationDate));
 
-            Console.WriteLine("Max  Score {0}", rawQuestions.Max(q => q.Score));
-            Console.WriteLine("Min  Score {0}", rawQuestions.Min(q => q.Score));
-            Console.WriteLine("Null Score {0}\n", rawQuestions.Count(q => q.Score == null));
+            Logger.LogStartupMessage("Max  Score {0}", rawQuestions.Max(q => q.Score));
+            Logger.LogStartupMessage("Min  Score {0}", rawQuestions.Min(q => q.Score));
+            Logger.LogStartupMessage("Null Score {0}\n", rawQuestions.Count(q => q.Score == null));
 
-            Console.WriteLine("Max  ViewCount {0}", rawQuestions.Max(q => q.ViewCount));
-            Console.WriteLine("Min  ViewCount {0}", rawQuestions.Min(q => q.ViewCount));
-            Console.WriteLine("Null ViewCount {0}\n", rawQuestions.Count(q => q.ViewCount == null));
+            Logger.LogStartupMessage("Max  ViewCount {0}", rawQuestions.Max(q => q.ViewCount));
+            Logger.LogStartupMessage("Min  ViewCount {0}", rawQuestions.Min(q => q.ViewCount));
+            Logger.LogStartupMessage("Null ViewCount {0}\n", rawQuestions.Count(q => q.ViewCount == null));
 
-            Console.WriteLine("Max  AnswerCount {0}", rawQuestions.Max(q => q.AnswerCount));
-            Console.WriteLine("Min  AnswerCount {0}", rawQuestions.Min(q => q.AnswerCount));
-            Console.WriteLine("Null AnswerCount {0}\n", rawQuestions.Count(q => q.AnswerCount == null));
+            Logger.LogStartupMessage("Max  AnswerCount {0}", rawQuestions.Max(q => q.AnswerCount));
+            Logger.LogStartupMessage("Min  AnswerCount {0}", rawQuestions.Min(q => q.AnswerCount));
+            Logger.LogStartupMessage("Null AnswerCount {0}\n", rawQuestions.Count(q => q.AnswerCount == null));
 
             var mostViewed = rawQuestions.OrderByDescending(q => q.ViewCount).First();
             var mostAnswers = rawQuestions.OrderByDescending(q => q.AnswerCount).First();
             var highestScore = rawQuestions.OrderByDescending(q => q.Score).First();
-            Console.WriteLine("Max ViewCount {0}, Question Id {1}", mostViewed.ViewCount, mostViewed.Id);
-            Console.WriteLine("Max Answers {0}, Question Id {1}", mostAnswers.AnswerCount, mostAnswers.Id);
-            Console.WriteLine("Max Score {0}, Question Id {1}\n", highestScore.Score, highestScore.Id);
+            Logger.LogStartupMessage("Max ViewCount {0}, Question Id {1}", mostViewed.ViewCount, mostViewed.Id);
+            Logger.LogStartupMessage("Max Answers {0}, Question Id {1}", mostAnswers.AnswerCount, mostAnswers.Id);
+            Logger.LogStartupMessage("Max Score {0}, Question Id {1}\n", highestScore.Score, highestScore.Id);
         }
 
         private static void PrintTagStats(TagLookup allTags)
@@ -352,7 +352,7 @@ namespace StackOverflowTagServer
 
                 if (bucket == -1)
                 {
-                    Console.WriteLine("Error: ({0}, {1})", tag.Key, tag.Value);
+                    Logger.LogStartupMessage("Error: ({0}, {1})", tag.Key, tag.Value);
                     continue;
                 }
 
@@ -376,12 +376,12 @@ namespace StackOverflowTagServer
                 totalsPerBucket.Add(bucket.Key, totalSoFar);
             }
 
-            Console.WriteLine();
+            Logger.LogStartupMessage();
             totalSoFar = 0;
             foreach (var bucket in histogram.OrderByDescending(h => h.Key))
             {
                 totalSoFar += bucket.Value.Count;
-                Console.WriteLine("{0,8:N0}: {1} {2} {3}",
+                Logger.LogStartupMessage("{0,8:N0}: {1} {2} {3}",
                     bucket.Key,
                     bucket.Value.Count.ToString("N0").PadRight(8),
                     totalsPerBucket[bucket.Key].ToString("N0").PadRight(8),
@@ -393,24 +393,24 @@ namespace StackOverflowTagServer
         private static void CompareLists(List<Question> listA, string nameA, List<Question> listB, string nameB)
         {
             if (listA.Count != listB.Count)
-                Console.WriteLine("ERROR: list have different lengths, {0}: {1}, {2}: {3}", nameA, listA.Count, nameB, listB.Count);
+                Logger.LogStartupMessage("ERROR: list have different lengths, {0}: {1}, {2}: {3}", nameA, listA.Count, nameB, listB.Count);
             var AExceptB = listA.Select(r => r.Id).Except(listB.Select(r => r.Id)).ToList();
             if (AExceptB.Any())
             {
-                Console.WriteLine("ERROR: Items in {0}, but not in {1}: {2}\n", nameA, nameB,
+                Logger.LogStartupMessage("ERROR: Items in {0}, but not in {1}: {2}\n", nameA, nameB,
                                   string.Join(", ", AExceptB.Select(r => string.Format("[{0}]={1}", listA.FindIndex(s => s.Id == r), r))));
             }
             var BExceptA = listB.Select(r => r.Id).Except(listA.Select(r => r.Id)).ToList();
             if (BExceptA.Any())
             {
-                Console.WriteLine("ERROR: Items in {0}, but not in {1}: {2}\n", nameB, nameA,
+                Logger.LogStartupMessage("ERROR: Items in {0}, but not in {1}: {2}\n", nameB, nameA,
                                   string.Join(", ", BExceptA.Select(r => string.Format("[{0}]={1}", listB.FindIndex(s => s.Id == r), r))));
             }
 
             //foreach (var item in Enumerable.Range(0, Math.Min(listA.Count, listB.Count)))
             //{
             //    if (listA[item].Id != listB[item].Id)
-            //        Console.WriteLine("ERROR: lists differ at position[{0}], {1} Id: {2}, {3} Id: {4}",
+            //        Logger.LogStartupMessage("ERROR: lists differ at position[{0}], {1} Id: {2}, {3} Id: {4}",
             //                          item, nameA, listA[item].Id, nameB, listB[item].Id);
             //}
         }
