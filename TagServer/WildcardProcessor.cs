@@ -26,6 +26,9 @@ namespace StackOverflowTagServer
         /// <summary> The Word Anchor is a '^' character </summary>
         private static readonly char WordAnchor = '^';
 
+        /// <summary> The N-Grams value, i.e. 2, 3, etc </summary>
+        public static readonly int N = 2; // We use 2 as 3 doesn't allow '*c#*' wildcards (but '*c#' and 'c#*' work),
+
         public static Trie<int> CreateTrie(TagLookup allTags)
         {
             // From http://algs4.cs.princeton.edu/52trie/
@@ -45,7 +48,7 @@ namespace StackOverflowTagServer
             return trie;
         }
 
-        public static NGrams CreateNGrams(TagLookup allTags, int N)
+        public static NGrams CreateNGrams(TagLookup allTags)
         {
             // From https://swtch.com/~rsc/regexp/regexp4.html,
             // Continuing the example from the last section, the document set:
@@ -71,7 +74,6 @@ namespace StackOverflowTagServer
             {
                 // TODO only use .ToList() here because we call .Count, if that was removed, we could lose the ToList() call
                 var nGrams = CreateNGramsForIndexing(item.Tag, N).ToList();
-                //var expected = Math.Max(1, item.Tag.Length - N + 1);
                 var expected = Math.Max(1, item.Tag.Length - N + 1 + 2);
                 if (expected != nGrams.Count)
                 {
@@ -93,8 +95,8 @@ namespace StackOverflowTagServer
                 }
             }
             nGramsTimer.Stop();
-            Logger.LogStartupMessage("\nTook {0} ({1,6:N2} ms) to create {2:N0} n-grams (ONE-OFF cost)\n",
-                                     nGramsTimer.Elapsed, nGramsTimer.Elapsed.TotalMilliseconds, allNGrams.Count);
+            Logger.LogStartupMessage("\nTook {0} ({1,6:N2} ms) to create {2:N0} N-Grams (with {3:N0} positions), using N={4} (this is a ONE-OFF cost)\n",
+                                     nGramsTimer.Elapsed, nGramsTimer.Elapsed.TotalMilliseconds, allNGrams.Count, allNGrams.Sum(n => n.Value.Count), N);
 
             return allNGrams;
         }
@@ -189,12 +191,6 @@ namespace StackOverflowTagServer
             {
                 if (IsWildCard(tagToExpand) == false)
                 {
-                    // With this mechanism Trie expansion takes 120.27 ms (00:00:00.1202737)
-                    //int value;
-                    //if (trie.TryGetValue(tagToExpand, out value))
-                    //    expandedTags.Add(tagToExpand);
-
-                    // With this mechanism Trie expansion takes 120.50 ms (00:00:00.1204961)
                     if (allTags.ContainsKey(tagToExpand))
                         expandedTags.Add(tagToExpand);
 
@@ -236,7 +232,7 @@ namespace StackOverflowTagServer
                 }
             }
 
-            Logger.Log("Took {0} ({1,6:N0} ms) for Trie expansion to do brute force searches", bruteForceTimer.Elapsed, bruteForceTimer.ElapsedMilliseconds);
+            Logger.Log("Took {0} ({1,6:N2} ms) for Trie expansion JUST to do brute force searches", bruteForceTimer.Elapsed, bruteForceTimer.ElapsedMilliseconds);
 
             return expandedTags;
         }
@@ -280,34 +276,32 @@ namespace StackOverflowTagServer
             {
                 // "anywhere" wildcard, i.e. "*foo*"
                 actualTag = tagPattern.Substring(1, tagPattern.Length - 2);
-                searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
+                searches.AddRange(CreateNGramsForSearch(actualTag, N));
             }
             else if (lastChar == '*')
             {
                 // "starts-with" or prefix search, i.e "foo*"
                 actualTag = tagPattern.Substring(0, tagPattern.Length - 1);
                 searches.Add(WordAnchor + actualTag.Substring(0, 2));
-                searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
+                searches.AddRange(CreateNGramsForSearch(actualTag, N));
             }
             else if (firstChar == '*')
             {
                 // "end-with" or suffix search, i.e "*foo"
                 actualTag = tagPattern.Substring(1, tagPattern.Length - 1);
-                searches.AddRange(CreateNGramsForSearch(actualTag, N: 3));
+                searches.AddRange(CreateNGramsForSearch(actualTag, N));
                 searches.Add(actualTag.Substring(tagPattern.Length - 3, 2) + WordAnchor);
             }
 
             return searches;
         }
 
-        private static bool CollectPossibleNGramMatches(
-                List<string> allTagsList, NGrams nGrams, IEnumerable<string> searches, string tagPattern, HashSet expandedTags)
+        private static bool CollectPossibleNGramMatches(List<string> allTagsList, NGrams nGrams, IEnumerable<string> searches, string tagPattern, HashSet expandedTags)
         {
-            //var expandTagsTimer = Stopwatch.StartNew();
             HashSet<int> expandedTagIds = null;
             foreach (var search in searches)
             {
-                // Sanity check, in case there is a tag in the exclusion list that is no longer an real tag
+                // Sanity check, in case there is a tag in the exclusion list that is no longer a real tag
                 if (nGrams.ContainsKey(search))
                 {
                     var tagLocations = nGrams[search];
@@ -336,12 +330,6 @@ namespace StackOverflowTagServer
                     //}
                 }
             }
-            //expandTagsTimer.Stop();
-
-            //Logger.Log("Took {0} ({1,6:N0} ms) in TOTAL, to expand to \"{2}\" to {3} Tags ({4} in total):",
-            //           expandTagsTimer.Elapsed, expandTagsTimer.ElapsedMilliseconds, tagPattern, tagsAdded, expandedTags.Count);
-            //Logger.Log(String.Join(", ", expandedTags));
-            //Logger.Log();
 
             return tagsAdded > 0;
         }

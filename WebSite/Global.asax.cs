@@ -28,7 +28,7 @@ namespace Server
             new Lazy<List<string>>(() => Utils.GetLeppieTagsFromResource(), LazyThreadSafetyMode.ExecutionAndPublication);
 
         internal static Lazy<NGrams> NGrams = new Lazy<NGrams>(() =>
-            WildcardProcessor.CreateNGrams(TagServer.Value.AllTags, N: 3), LazyThreadSafetyMode.ExecutionAndPublication);
+            WildcardProcessor.CreateNGrams(TagServer.Value.AllTags), LazyThreadSafetyMode.ExecutionAndPublication);
 
         protected void Application_Start()
         {
