@@ -139,6 +139,78 @@ namespace StackOverflowTagServer
             return queryInfo[tag].Length;
         }
 
+        internal EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType)
+        {
+            var bitMapTimer = Stopwatch.StartNew();
+            var tagLookupForQueryType = GetTagLookupForQueryType(queryType);
+            var bitMap = new EwahCompressedBitArray();
+
+            var collectIdsTimer = Stopwatch.StartNew();
+            var excludedQuestionIds = new HashSet<int>();
+            foreach (var tag in tagsToExclude)
+            {
+                foreach (var id in tagLookupForQueryType[tag])
+                {
+                    excludedQuestionIds.Add(id);
+                }
+            }
+            collectIdsTimer.Stop();
+
+            // At the end we need to have the BitMap Set (i.e. 1) in places where you CAN use the question, i.e. it's NOT excluded
+            // That way we can efficiently apply the exclusions by ANDing this BitMap to the previous results
+
+            var setBitsTimer = Stopwatch.StartNew();
+            var reverseMode = excludedQuestionIds.Count < (questions.Count / 2);
+
+            var allQuestions = tagLookupForQueryType[ALL_TAGS_KEY];
+            for (int index = 0; index < allQuestions.Length; index++)
+            {
+                var questionId = allQuestions[index];
+                bool wasSet = true;
+                if (reverseMode && excludedQuestionIds.Contains(questionId))
+                    wasSet = bitMap.Set(index); // Set where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
+                else if (reverseMode == false && excludedQuestionIds.Contains(questionId) == false)
+                    wasSet = bitMap.Set(index); // Directly set where you CAN use the question
+
+                if (wasSet == false)
+                    Logger.LogStartupMessage("Error, unable to set bit {0:N0} (SizeInBits = {1:N0})", index, bitMap.SizeInBits);
+            }
+            setBitsTimer.Stop();
+
+            var tidyUpTimer = Stopwatch.StartNew();
+            bitMap.SetSizeInBits(questions.Count, defaultvalue: false);
+            bitMap.Shrink();
+            tidyUpTimer.Stop();
+
+            var notTimer = Stopwatch.StartNew();
+            if (reverseMode)
+                bitMap.Not();
+            notTimer.Stop();
+
+            bitMapTimer.Stop();
+
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to collect {2:N0} Question Ids from {3:N0} Tags",
+                                     collectIdsTimer.Elapsed, collectIdsTimer.ElapsedMilliseconds, excludedQuestionIds.Count, tagsToExclude.Count);
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits {3}",
+                                     setBitsTimer.Elapsed, setBitsTimer.ElapsedMilliseconds,
+                                     reverseMode ? (ulong)questions.Count - bitMap.GetCardinality() : bitMap.GetCardinality(),
+                                     reverseMode ? "(in REVERSE mode)" : "");
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to tidy-up the Bit Map (SetSizeInBits(..) and Shrink()), Size={2:N0} bytes ({3:N2} MB)",
+                                     tidyUpTimer.Elapsed, tidyUpTimer.ElapsedMilliseconds, bitMap.SizeInBytes, bitMap.SizeInBytes / 1024.0 / 1024.0);
+            if (reverseMode)
+                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to do a NOT on the BitMap", notTimer.Elapsed, notTimer.ElapsedMilliseconds);
+
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to create BitMap from {2:N0} Tags ({3:N0} Qu Ids), Cardinality={4:N0} ({5:N0}) {6}\n",
+                                     bitMapTimer.Elapsed, bitMapTimer.ElapsedMilliseconds,
+                                     tagsToExclude.Count,
+                                     excludedQuestionIds.Count,
+                                     bitMap.GetCardinality(),
+                                     (ulong)questions.Count - bitMap.GetCardinality(),
+                                     reverseMode ? "REVERSE mode" : "");
+
+            return bitMap;
+        }
+
         /// <summary>
         /// Private constructor that is used when creating the Tag Server from SCRATCH (<see cref="CreateFromScratchAndSaveToDisk"/>)
         /// </summary>
