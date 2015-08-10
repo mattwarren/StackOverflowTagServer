@@ -39,6 +39,14 @@ namespace StackOverflowTagServer.DataStructures
 #if DEBUG
         public bool PossiblyExists(int item, bool debugInfo = false)
 #else
+        /// <summary>
+        /// A bloom filter is basically a bitvector, where you set bits.
+        /// If you want to figure out if an item exists,
+        /// the bloom filter will give you a TRUE if the item possibly exists
+        /// and a FALSE if the item for sure doesn't exist.
+        /// </summary>
+        /// <param name="item"></param>
+        /// <returns></returns>
         public bool PossiblyExists(int item)
 #endif
         {

@@ -250,6 +250,7 @@ namespace StackOverflowTagServer
             var expandedTags = new HashSet();
             // TODO is there a better way of doing this, as we are creating a tempoary list, just for indexing the dictionary!!!
             var allTagsList = allTags.Keys.ToList();
+            var results = new NGramResults();
             foreach (var tagPattern in tagsToExpand)
             {
                 if (IsWildCard(tagPattern) == false)
@@ -260,9 +261,14 @@ namespace StackOverflowTagServer
                     continue;
                 }
 
+                results.ActualWildcards++;
                 var searches = CreateSearches(tagPattern);
-                var tagAdded = CollectPossibleNGramMatches(allTagsList, nGrams, searches, tagPattern, expandedTags);
+                var tagAdded = CollectPossibleNGramMatches(allTagsList, nGrams, searches, tagPattern, expandedTags, results);
             }
+            Logger.Log("{0:N0} wildcards, {1:N0} searches processed, {2:N0} tag Ids collected, \n" +
+                       "{3:N0} possible matches, {4:N0} IsActualMatch checks, {5:N0} tags added, {6:N0} false positives",
+                       results.ActualWildcards, results.SearchesProcessed, results.TagIdsCollected, results.PossibleMatches,
+                       results.ActualMatchChecks, results.TagsAdded, results.FalsePositives);
             return expandedTags;
         }
 
@@ -282,7 +288,7 @@ namespace StackOverflowTagServer
             {
                 // "starts-with" or prefix search, i.e "foo*"
                 actualTag = tagPattern.Substring(0, tagPattern.Length - 1);
-                searches.Add(WordAnchor + actualTag.Substring(0, 2));
+                searches.Add(WordAnchor + actualTag.Substring(0, N - 1)); // Take the value of N into account
                 searches.AddRange(CreateNGramsForSearch(actualTag, N));
             }
             else if (firstChar == '*')
@@ -290,48 +296,63 @@ namespace StackOverflowTagServer
                 // "end-with" or suffix search, i.e "*foo"
                 actualTag = tagPattern.Substring(1, tagPattern.Length - 1);
                 searches.AddRange(CreateNGramsForSearch(actualTag, N));
-                searches.Add(actualTag.Substring(tagPattern.Length - 3, 2) + WordAnchor);
+                searches.Add(actualTag.Substring(tagPattern.Length - N, N - 1) + WordAnchor); // Take the value of N into account
             }
 
             return searches;
         }
 
-        private static bool CollectPossibleNGramMatches(List<string> allTagsList, NGrams nGrams, IEnumerable<string> searches, string tagPattern, HashSet expandedTags)
+        private static bool CollectPossibleNGramMatches(List<string> allTagsList, NGrams nGrams, IEnumerable<string> searches,
+                                                        string tagPattern, HashSet expandedTags, NGramResults results)
         {
             HashSet<int> expandedTagIds = null;
-            foreach (var search in searches)
+            // Sanity check, in case there is a tag in the exclusion list that is no longer a real tag
+            // Also start with the search that has the least matches/hits, makes the Hash set intersections slightly faster
+            foreach (var search in searches.Where(s => nGrams.ContainsKey(s)).OrderBy(s => nGrams[s].Count))
             {
-                // Sanity check, in case there is a tag in the exclusion list that is no longer a real tag
-                if (nGrams.ContainsKey(search))
+                results.SearchesProcessed++;
+                var tagLocations = nGrams[search];
+                results.TagIdsCollected += tagLocations.Count;
+                if (expandedTagIds == null)
                 {
-                    var tagLocations = nGrams[search];
-                    if (expandedTagIds == null)
-                        expandedTagIds = new HashSet<int>(tagLocations);
-                    else
-                        expandedTagIds.IntersectWith(tagLocations);
+                    expandedTagIds = new HashSet<int>(tagLocations);
+                }
+                else
+                {
+                    expandedTagIds.IntersectWith(tagLocations);
+                    // This seems to be slower (probably the time taken to build the extra HashSet(..)
+                    // even though it should be able to use a fast-path intersect as it's intersecting 2 HashSets!!
+                    // expandedTagIds.IntersectWith(new HashSet<int>(tagLocations));
                 }
             }
 
-            var tagsAdded = 0;
+            if (expandedTagIds == null)
+            {
+                Logger.Log("TagPattern={0} (Searches: {1}), produces NO Tag Ids to test", tagPattern, String.Join(", ", searches));
+                return false;
+            }
+
+            // N-Grams can give false +ve, so we have to sanity check each match!
+            // For example TagPattern: *php*, Searches: ph, hp, Tag: phonegap-pushplugin,
+            bool tagWasAdded = false;
+            results.PossibleMatches += (expandedTagIds != null ? expandedTagIds.Count : 1);
             var rawTagPattern = tagPattern.Replace("*", "");
-            if (expandedTagIds != null)
+            foreach (var tagMatch in expandedTagIds.Select(expandedTagId => allTagsList[expandedTagId]))
             {
-                foreach (var tagMatch in expandedTagIds.Select(expandedTagId => allTagsList[expandedTagId]))
+                results.ActualMatchChecks++;
+                if (IsActualMatch(tagMatch, tagPattern, rawTagPattern))
                 {
-                    if (IsActualMatch(tagMatch, tagPattern, rawTagPattern))
-                    {
-                        expandedTags.Add(tagMatch);
-                        tagsAdded++;
-                    }
-                    //else
-                    //{
-                    //    Logger.Log("False Positive, Tag: {0}, TagPattern: {1}, Searches: {2}",
-                    //               tagMatch, tagPattern, String.Join(", ", searches));
-                    //}
+                    expandedTags.Add(tagMatch);
+                    results.TagsAdded++;
+                    tagWasAdded = true;
+                }
+                else
+                {
+                    results.FalsePositives++;
                 }
             }
 
-            return tagsAdded > 0;
+            return tagWasAdded;
         }
 
         // Heavily-modified version of the code from http://jakemdrew.com/blog/ngram.htm
@@ -484,6 +505,20 @@ namespace StackOverflowTagServer
         private static bool IsWildCard(string tag)
         {
             return tag.Contains("*");
+        }
+
+        private class NGramResults
+        {
+            public int ActualWildcards { get; set; }
+
+            public int SearchesProcessed { get; set; }
+            public int TagIdsCollected { get; set; }
+
+            public int PossibleMatches { get; set; }
+            public int ActualMatchChecks { get; set; }
+            public int FalsePositives { get; set; }
+
+            public int TagsAdded { get; set; }
         }
     }
 }
