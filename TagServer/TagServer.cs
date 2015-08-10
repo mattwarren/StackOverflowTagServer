@@ -1,4 +1,5 @@
-﻿using ProtoBuf;
+﻿using Ewah;
+using ProtoBuf;
 using Shared;
 using StackOverflowTagServer.DataStructures;
 using StackOverflowTagServer.Querying;
@@ -11,7 +12,6 @@ using System.Linq;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 using TagByQueryBitMapIndex = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
-using Ewah;
 
 namespace StackOverflowTagServer
 {
@@ -115,12 +115,13 @@ namespace StackOverflowTagServer
             {
                 var tagLookupFileName = "intermediate-Lookup-" + type + ".bin";
                 var tempLookup = Serialisation.DeserialiseFromDisk<TagByQueryLookup>(tagLookupFileName, intermediateFilesFolder);
-                intermediateLookups.Add(type, tempLookup);
                 Logger.LogStartupMessage("{0,20} contains {1:N0} Tag Lookups", type, tempLookup.Count);
+                intermediateLookups.Add(type, tempLookup);
 
                 var bitMapIndexFileName = String.Format("intermediate-BitMap-{0}.bin", type);
                 var tempBitMapIndexes = Serialisation.DeserialiseFromDisk(bitMapIndexFileName, intermediateFilesFolder);
                 Logger.LogStartupMessage("{0,20} contains {1:N0} Tag BitMap Indexes", type, tempBitMapIndexes.Count);
+                intermediateBitMapIndexes.Add(type, tempBitMapIndexes);
 
                 Logger.LogStartupMessage();
             }
@@ -352,20 +353,20 @@ namespace StackOverflowTagServer
 
         private void CreateSortedLists(Dictionary<string, TagWithPositions> groupedTags, bool useAlternativeMethod = false)
         {
-            //New faster sorting method:
+            //New faster sorting method (results from 2 different runs):
             //    Took 00:00:11.2802896 (11,280 ms) to sort the 191,030 arrays ALTERNATIVE method - Using 4,537.50 MB (4.43 GB) of memory
             //    Took 00:00:11.4762493 (11,476 ms) to sort the 191,030 arrays ALTERNATIVE method - Using 4,537.50 MB (4.43 GB) of memory
-            //Old slower way of doing it (using a custom Comparer and indexing into the Questions array for each comparision):
+            //Old slower way of doing it (using a custom Comparer and indexing into the Questions array for each comparision, results from 2 different runs):
             //    Took 00:01:53.6553645 (113,655 ms) to sort the 191,030 arrays - Using 4,537.50 MB (4.43 GB) of memory
             //    Took 00:01:55.2932862 (115,293 ms) to sort the 191,030 arrays - Using 4,537.50 MB (4.43 GB) of memory
             var sortingTimer = Stopwatch.StartNew();
             foreach (var tag in groupedTags)
             {
-                tagsByAnswerCount.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.AnswerCount));
-                tagsByCreationDate.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.CreationDate));
-                tagsByLastActivityDate.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.LastActivityDate));
-                tagsByScore.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.Score));
-                tagsByViewCount.Add(tag.Key, CreateSortedArrayForTagAlternativeMethod(tag.Value.Positions, QueryType.ViewCount));
+                tagsByAnswerCount.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, QueryType.AnswerCount));
+                tagsByCreationDate.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, QueryType.CreationDate));
+                tagsByLastActivityDate.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, QueryType.LastActivityDate));
+                tagsByScore.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, QueryType.Score));
+                tagsByViewCount.Add(tag.Key, CreateSortedArrayForTag(tag.Value.Positions, QueryType.ViewCount));
             }
             sortingTimer.Stop();
 
@@ -376,44 +377,48 @@ namespace StackOverflowTagServer
                                      useAlternativeMethod ? "ALTERNATIVE method " : "", memoryUsed, memoryUsed / 1024.0);
         }
 
-        private int[] CreateSortedArrayForTagAlternativeMethod(int[] positions, QueryType queryType)
+        private int[] CreateSortedArrayForTag(int[] questionIds, QueryType queryType)
         {
             // Using alternative sorting method, inspired by Marc Gravell's SO answer, see
             // http://stackoverflow.com/questions/17399917/c-sharp-fastest-way-to-sort-array-of-primitives-and-track-their-indices/17399982#17399982
-            var unsortedArray = new long[positions.Length];
+            var questionValues = new long[questionIds.Length];
             switch (queryType)
             {
                 case QueryType.AnswerCount:
-                    for (int i = 0; i < unsortedArray.Length; i++)
-                        unsortedArray[i] = questions[positions[i]].AnswerCount ?? -1;
+                    for (int i = 0; i < questionValues.Length; i++)
+                        questionValues[i] = questions[questionIds[i]].AnswerCount ?? -1;
                     break;
                 case QueryType.CreationDate:
-                    for (int i = 0; i < unsortedArray.Length; i++)
-                        unsortedArray[i] = questions[positions[i]].CreationDate.Ticks;
+                    for (int i = 0; i < questionValues.Length; i++)
+                        questionValues[i] = questions[questionIds[i]].CreationDate.Ticks;
                     break;
                 case QueryType.LastActivityDate:
-                    for (int i = 0; i < unsortedArray.Length; i++)
-                        unsortedArray[i] = questions[positions[i]].LastActivityDate.Ticks;
+                    for (int i = 0; i < questionValues.Length; i++)
+                        questionValues[i] = questions[questionIds[i]].LastActivityDate.Ticks;
                     break;
                 case QueryType.Score:
-                    for (int i = 0; i < unsortedArray.Length; i++)
-                        unsortedArray[i] = questions[positions[i]].Score ?? -1;
+                    for (int i = 0; i < questionValues.Length; i++)
+                        questionValues[i] = questions[questionIds[i]].Score ?? -1;
                     break;
                 case QueryType.ViewCount:
-                    for (int i = 0; i < unsortedArray.Length; i++)
-                        unsortedArray[i] = questions[positions[i]].ViewCount ?? -1;
+                    for (int i = 0; i < questionValues.Length; i++)
+                        questionValues[i] = questions[questionIds[i]].ViewCount ?? -1;
                     break;
             }
 
-            int[] indices = new int[unsortedArray.Length];
+            // Create the indicies array (that is then sorted in the way as questionValues array)
+            int[] indices = new int[questionValues.Length];
             for (int i = 0; i < indices.Length; i++)
-                indices[i] = positions[i];
+                indices[i] = questionIds[i];
+
             // TODO it would be nicer if we could just sort in reverse order, but the overload doesn't seem to allow that!!
             //var reverseComparer = new Comparison<int>((i1, i2) => i1.CompareTo(i2));
-            Array.Sort(unsortedArray, indices);
+            Array.Sort(questionValues, indices);
+
             // We want all the items to be sorted descending, i.e. highest first
             Array.Reverse(indices);
-            return indices; // this is now sorted!!
+
+            return indices;
         }
 
         private void CreateBitMapIndexes(Dictionary<string, TagWithPositions> groupedTags)
@@ -614,7 +619,7 @@ namespace StackOverflowTagServer
                                      validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
         }
 
-        public class TagWithPositions
+        private class TagWithPositions
         {
             public int Count { get; set; }
             public int[] Positions { get; set; }
