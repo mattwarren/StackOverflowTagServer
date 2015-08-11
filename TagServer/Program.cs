@@ -25,13 +25,8 @@ namespace StackOverflowTagServer
 
             var startupTimer = Stopwatch.StartNew();
             var rawQuestions = TagServer.GetRawQuestionsFromDisk(folder, filename);
-
-            TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
-            //TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder);
-
-            //PrintQuestionStats(rawQuestions);
-            //PrintTagStats(tagServer.AllTags);
-
+            //TagServer tagServer = TagServer.CreateFromScratchAndSaveToDisk(rawQuestions, intermediateFilesFolder: folder);
+            TagServer tagServer = TagServer.CreateFromSerialisedData(rawQuestions, intermediateFilesFolder: folder); //, deserialiseBitMapsIndexes: false);
             startupTimer.Stop();
 
             GC.Collect(2, GCCollectionMode.Forced);
@@ -39,15 +34,28 @@ namespace StackOverflowTagServer
             Logger.LogStartupMessage("Took {0} ({1,6:N2} ms), in total to complete Startup - Using {2:N2} MB ({3:N2} GB) of memory in TOTAL",
                               startupTimer.Elapsed, startupTimer.Elapsed.TotalMilliseconds, totalMemory, totalMemory / 1024.0);
 
+            //PrintQuestionStats(rawQuestions);
+            //PrintTagStats(tagServer.AllTags);
+
             //RunComparisonQueries(tagServer);
-            return;
+            //return;
 
             Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);
-            NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags, N: 3);
+            NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags);
 
             // <.net> and <c#> aren't in this lists, so they can be valid tags!
             var leppieTags = Utils.GetLeppieTagsFromResource();
-            var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
+            //var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
+
+            //var expandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, new List<string>(new [] { "*c#*" }));
+
+            TestWildcards(tagServer, nGrams, "*c#*");
+            TestWildcards(tagServer, nGrams, "*c#", "c#*");
+            TestWildcards(tagServer, nGrams, "*c#");
+            TestWildcards(tagServer, nGrams, "c#*");
+            TestWildcards(tagServer, nGrams, "c#-2.0");
+            TestWildcards(tagServer, nGrams, leppieTags.ToArray());
+            TestWildcards(tagServer, nGrams, "*"); // INCLUDE all Tags
 
             // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
             //GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
@@ -56,8 +64,8 @@ namespace StackOverflowTagServer
 
             //RunSimpleQueries();
 
-            Logger.LogStartupMessage("Finished, press <ENTER> to exit");
-            Console.ReadLine();
+            //Logger.LogStartupMessage("Finished, press <ENTER> to exit");
+            //Console.ReadLine();
         }
 
         private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, HashSet leppieExpandedTags)
@@ -89,9 +97,9 @@ namespace StackOverflowTagServer
             var expandTagsContains = WildcardProcessor.ExpandTagsContainsStartsWithEndsWith(allTags, tagsToExpand);
             expandTagsContainsTimer.Stop();
 
-            var expandTagsVBTimer = Stopwatch.StartNew();
-            var expandedTagsVB = WildcardProcessor.ExpandTagsVisualBasic(allTags, tagsToExpand);
-            expandTagsVBTimer.Stop();
+            //var expandTagsVBTimer = Stopwatch.StartNew();
+            //var expandedTagsVB = WildcardProcessor.ExpandTagsVisualBasic(allTags, tagsToExpand);
+            //expandTagsVBTimer.Stop();
 
             var expandTagsRegexTimer = Stopwatch.StartNew();
             var expandedTagsRegex = WildcardProcessor.ExpandTagsRegex(allTags, tagsToExpand);
@@ -105,24 +113,25 @@ namespace StackOverflowTagServer
             var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(allTags, tagsToExpand, nGrams);
             expandTagsRegexTimer.Stop();
 
-            Logger.LogStartupMessage("There are {0:N0} tags in total", allTags.Count);
-            Logger.LogStartupMessage("There are {0:N0} tags (raw) BEFORE expansion", tagsToExpand.Count);
-            Logger.LogStartupMessage("Expanded to {0:N0} tags (Contains),  took {1,8:N2} ms ({2})",
-                  expandTagsContains.Count, expandTagsContainsTimer.Elapsed.TotalMilliseconds, expandTagsContainsTimer.Elapsed);
-            Logger.LogStartupMessage("Expanded to {0:N0} tags (VB),        took {1,8:N2} ms ({2})",
-                            expandedTagsVB.Count, expandTagsVBTimer.Elapsed.TotalMilliseconds, expandTagsVBTimer.Elapsed);
-            Logger.LogStartupMessage("Expanded to {0:N0} tags (Regex),     took {1,8:N2} ms ({2})",
-                            expandedTagsRegex.Count, expandTagsRegexTimer.Elapsed.TotalMilliseconds, expandTagsRegexTimer.Elapsed);
-            Logger.LogStartupMessage("Expanded to {0:N0} tags (Trie),      took {1,8:N2} ms ({2})",
-                            expandedTagsTrie.Count, expandTagsTrieTimer.Elapsed.TotalMilliseconds, expandTagsTrieTimer.Elapsed);
-            Logger.LogStartupMessage("Expanded to {0:N0} tags (NGrams),    took {1,8:N2} ms ({2})",
-                            expandedTagsNGrams.Count, expandedTagsNGramsTimer.Elapsed.TotalMilliseconds, expandedTagsNGramsTimer.Elapsed);
+            Logger.LogStartupMessage("\nThere are {0:N0} tags in total", allTags.Count);
+            Logger.LogStartupMessage("There are {0:N0} tags/wildcards (raw) BEFORE expansion", tagsToExpand.Count);
+
+            Logger.LogStartupMessage("\nExpanded to {0,4:N0} tags (Contains),  took {1,8:N2} ms ({2})",
+                                     expandTagsContains.Count, expandTagsContainsTimer.Elapsed.TotalMilliseconds, expandTagsContainsTimer.Elapsed);
+            //Logger.LogStartupMessage("Expanded to {0,4:N0} tags (VB),        took {1,8:N2} ms ({2})",
+            //                         expandedTagsVB.Count, expandTagsVBTimer.Elapsed.TotalMilliseconds, expandTagsVBTimer.Elapsed);
+            Logger.LogStartupMessage("Expanded to {0,4:N0} tags (Regex),     took {1,8:N2} ms ({2})",
+                                     expandedTagsRegex.Count, expandTagsRegexTimer.Elapsed.TotalMilliseconds, expandTagsRegexTimer.Elapsed);
+            Logger.LogStartupMessage("Expanded to {0,4:N0} tags (Trie),      took {1,8:N2} ms ({2})",
+                                     expandedTagsTrie.Count, expandTagsTrieTimer.Elapsed.TotalMilliseconds, expandTagsTrieTimer.Elapsed);
+            Logger.LogStartupMessage("Expanded to {0,4:N0} tags (N-Grams),   took {1,8:N2} ms ({2})",
+                                     expandedTagsNGrams.Count, expandedTagsNGramsTimer.Elapsed.TotalMilliseconds, expandedTagsNGramsTimer.Elapsed);
 
             Logger.LogStartupMessage("\nIn Contains but not in Regex: " + string.Join(", ", expandTagsContains.Except(expandedTagsRegex)));
             Logger.LogStartupMessage("\nIn Regex but not in Contains: " + string.Join(", ", expandedTagsRegex.Except(expandTagsContains)));
 
-            Logger.LogStartupMessage("\nIn Contains but not in VB: " + string.Join(", ", expandTagsContains.Except(expandedTagsVB)));
-            Logger.LogStartupMessage("\nIn VB but not in Contains: " + string.Join(", ", expandedTagsVB.Except(expandTagsContains)));
+            //Logger.LogStartupMessage("\nIn Contains but not in VB: " + string.Join(", ", expandTagsContains.Except(expandedTagsVB)));
+            //Logger.LogStartupMessage("\nIn VB but not in Contains: " + string.Join(", ", expandedTagsVB.Except(expandTagsContains)));
 
             Logger.LogStartupMessage("\nIn Contains but not in Trie: " + string.Join(", ", expandTagsContains.Except(expandedTagsTrie)));
             Logger.LogStartupMessage("\nIn Trie but not in Contains: " + string.Join(", ", expandedTagsTrie.Except(expandTagsContains)));
@@ -140,6 +149,62 @@ namespace StackOverflowTagServer
                 Logger.LogStartupMessage("\nExtra Tags: " + string.Join(", ", extra) + "\n");
 
             return expandedTags;
+        }
+
+        private static void TestWildcards(TagServer tagServer, NGrams nGrams, params string[] tagsToExpandInput)
+        {
+            var tagsToExpand = tagsToExpandInput.ToList();
+
+            if (tagsToExpand.Count == 1 && tagsToExpand[0] == "*")
+            {
+                // special case!!
+                var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(new CLR.HashSet<string>(tagServer.AllTags.Keys), QueryType.AnswerCount);
+                return;
+            }
+
+            var timer = Stopwatch.StartNew();
+            var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, tagsToExpand, nGrams);
+            timer.Stop();
+            using (Utils.SetConsoleColour(ConsoleColor.DarkYellow))
+            {
+                Logger.LogStartupMessage("Took {0,6:N2} ms ({1}) to expanded Wildcards to {2,2:N0} tags (using N-Grams, with N={3})",
+                                         timer.Elapsed.TotalMilliseconds, timer.Elapsed, expandedTagsNGrams.Count, WildcardProcessor.N);
+            }
+
+            var wildcards = tagsToExpand.Where(t => t.Contains('*')).ToList();
+            Logger.LogStartupMessage("There are {0:N0} wildcards in the list and {1:N0} regular tags (i.e. with no '*' in them)",
+                                     wildcards.Count, tagsToExpand.Count(w => w.Contains('*') == false));
+            if (wildcards.Count > 50)
+                Logger.LogStartupMessage("Wildcards: TOO MANY TO PRINT (there are {0:N0} wildcards)", wildcards.Count);
+            else
+                Logger.LogStartupMessage("Wildcards: [{0}]", String.Join(", ", tagsToExpand.Where(w => w.Contains('*'))));
+
+            var expansions = tagsToExpand.Where(w => w.Contains('*'))
+                                      .Select(w => String.Format("{0} -> {1}", w, String.Join(", ", WildcardProcessor.CreateSearches(w))))
+                                      .ToList();
+            if (expansions.Count > 50)
+                Logger.LogStartupMessage("Expansions: TOO MANY TO PRINT (there are {0:N0} expansions)", expansions.Count);
+            else
+                Logger.LogStartupMessage("Expansions:\n  {0}", String.Join("\n  ", expansions));
+
+            if (expandedTagsNGrams.Count > 50)
+                Logger.LogStartupMessage("Results: TOO MANY TO PRINT (there are {0:N0} results)", expandedTagsNGrams.Count);
+            else
+                Logger.LogStartupMessage("Results: [{0}]", String.Join(", ", expandedTagsNGrams));
+
+            var expandTagsContainsTimer = Stopwatch.StartNew();
+            var expandTagsContains = WildcardProcessor.ExpandTagsContainsStartsWithEndsWith(tagServer.AllTags, tagsToExpand);
+            expandTagsContainsTimer.Stop();
+
+            Logger.LogStartupMessage("\nIn Contains but not in NGrams: " + string.Join(", ", expandTagsContains.Except(expandedTagsNGrams)));
+            Logger.LogStartupMessage("\nIn NGrams but not in Contains: " + string.Join(", ", expandedTagsNGrams.Except(expandTagsContains)));
+            Logger.LogStartupMessage();
+
+            var bitMapIndex1 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.AnswerCount);
+            //var bitMapIndex2 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.CreationDate);
+            //var bitMapIndex3 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.LastActivityDate);
+            //var bitMapIndex4 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.Score);
+            //var bitMapIndex5 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.ViewCount);
         }
 
         private static void RunComparisonQueries(TagServer tagServer)
