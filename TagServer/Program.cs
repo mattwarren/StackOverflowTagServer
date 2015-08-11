@@ -37,6 +37,24 @@ namespace StackOverflowTagServer
             //PrintQuestionStats(rawQuestions);
             //PrintTagStats(tagServer.AllTags);
 
+            foreach (var @operator in new[] { "OR", "OR NOT", "AND", "AND NOT" })
+            {
+                using (Utils.SetConsoleColour(ConsoleColor.Green))
+                    Logger.Log("\nRunning \"{0}\" Queries", @operator);
+
+                tagServer.TestBitMapIndexes(tag1: "c#", tag2: "java", queryType: QueryType.ViewCount, @operator: @operator);
+                tagServer.TestBitMapIndexes(tag1: "c#", tag2: ".net-3.5", queryType: QueryType.ViewCount, @operator: @operator);
+                tagServer.TestBitMapIndexes(tag1: ".net-3.5", tag2: "c#", queryType: QueryType.ViewCount, @operator: @operator);
+                tagServer.TestBitMapIndexes(tag1: "c#", tag2: "java", queryType: QueryType.ViewCount, @operator: @operator);
+                tagServer.TestBitMapIndexes(tag1: "c#", tag2: "javascript", queryType: QueryType.ViewCount, @operator: @operator);
+
+                //tagServer.TestBitMapIndexes(tag1: "c#", tag2: "java", queryType: QueryType.Score, @operator: @operator);
+                //tagServer.TestBitMapIndexes(tag1: "c#", tag2: ".net-3.5", queryType: QueryType.Score, @operator: @operator);
+                //tagServer.TestBitMapIndexes(tag1: ".net-3.5", tag2: "c#", queryType: QueryType.Score, @operator: @operator);
+                //tagServer.TestBitMapIndexes(tag1: "c#", tag2: "java", queryType: QueryType.Score, @operator: @operator);
+                //tagServer.TestBitMapIndexes(tag1: "c#", tag2: "javascript", queryType: QueryType.Score, , @operator: @operator);
+            }
+
             //RunComparisonQueries(tagServer);
             //return;
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 
 namespace StackOverflowTagServer.CLR
 {
@@ -124,6 +125,22 @@ namespace StackOverflowTagServer.CLR
         }
 
         /// <summary>
+        /// Inverts all the bit values. On/true bit values are converted to off/false.
+        /// Off/false bit values are turned on/true. The current instance is updated and returned.
+        /// Code from Not http://referencesource.microsoft.com/#mscorlib/system/collections/bitarray.cs,e71a526d814e6d57
+        /// </summary>
+        /// <returns></returns>
+        internal BitHelper Not()
+        {
+            for (int i = 0; i < m_array.Length; i++)
+            {
+                m_array[i] = ~m_array[i];
+            }
+
+            return this;
+        }
+
+        /// <summary>
         /// How many ints must be allocated to represent n bits. Returns (n+31)/32, but
         /// avoids overflow
         /// </summary>
@@ -132,6 +149,48 @@ namespace StackOverflowTagServer.CLR
         internal static int ToIntArrayLength(int n)
         {
             return n > 0 ? ((n - 1) / IntSize + 1) : 0;
+        }
+
+        internal int GetCardinality()
+        {
+            int counter = 0;
+            for (int i = 0; i < m_array.Length; i++)
+            {
+                counter += NumberOfSetBits(m_array[i]);
+                //counter += CountBits(m_array[i]);
+                //counter += (Convert.ToString(m_array[i], 2).ToCharArray().Count(c => c == '1'));
+
+                var value = m_array[i];
+                var method1 = NumberOfSetBits(value);
+                var method2 = CountBits(value);
+                var method3 = Convert.ToString(m_array[i], 2).PadLeft(32, '0').ToCharArray().Count(c => c == '1');
+                var okay = (method1 == method2) && (method2 == method3);
+                if (!okay)
+                {
+                    Console.WriteLine("ERROR: method1={0:N0}, method2={1:N0}, method3={2:N0}", method1, method2, method3);
+                }
+            }
+            return counter;
+        }
+
+        // From http://stackoverflow.com/questions/12171584/what-is-the-fastest-way-to-count-set-bits-in-uint32-in-c-sharp/12175897#12175897
+        int NumberOfSetBits(int i)
+        {
+            i = i - ((i >> 1) & 0x55555555);
+            i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
+            return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+        }
+
+        // From http://stackoverflow.com/questions/12171584/what-is-the-fastest-way-to-count-set-bits-in-uint32-in-c-sharp/12171691#12171691
+        int CountBits(int value)
+        {
+            int count = 0;
+            while (value != 0)
+            {
+                count++;
+                value &= value - 1;
+            }
+            return count;
         }
     }
 }
