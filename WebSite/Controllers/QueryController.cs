@@ -51,46 +51,7 @@ namespace Server.Controllers
                 jsonResults.Add("DEBUGGING", GetDebugInfo(queryInfo, result, tagExpansionTimer.Elapsed, timer.Elapsed, leppieWildcards, leppieExpandedTags));
             jsonResults.Add("Results", result.Questions);
             return jsonResults;
-        }
-
-        [Route("api/Query/LeppieWildcards")]
-        [HttpGet]
-        public object LeppieWildcards()
-        {
-            var justWildcards = WebApiApplication.LeppieWildcards.Value
-                                    .Where(w => w.Contains("*"))
-                                    .OrderBy(t => t)
-                                    .ToList();
-            return new
-            {
-                Count = WebApiApplication.LeppieWildcards.Value.Count,
-                JustWildcardsCount = justWildcards.Count,
-                JustWildcards = justWildcards,
-                FullList = WebApiApplication.LeppieWildcards.Value.OrderBy(t => t)
-            };
-        }
-
-        [Route("api/Query/LeppieExcludedTags")]
-        [HttpGet]
-        public object LeppieExpandedWildcards()
-        {
-            var allTags = WebApiApplication.TagServer.Value.AllTags;
-            var leppieWildcards = WebApiApplication.LeppieWildcards.Value;
-            var nGrams = WebApiApplication.NGrams.Value;
-            var timer = Stopwatch.StartNew();
-            var expandedWildcards = WildcardProcessor.ExpandTagsNGrams(allTags, leppieWildcards, nGrams)
-                                                     .OrderBy(t => t)
-                                                     .ToList();
-            timer.Stop();
-
-            return new
-            {
-                ElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2"),
-                CountBeforeExpansion = leppieWildcards.Count,
-                ExpandedCount = expandedWildcards.Count,
-                ExpandedWildcards = expandedWildcards
-            };
-        }
+        }        
 
         private object GetDebugInfo(QueryInfo queryInfo, QueryResult result,
                                     TimeSpan tagsExpansionTime, TimeSpan totalTime,

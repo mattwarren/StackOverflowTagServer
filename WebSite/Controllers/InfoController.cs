@@ -61,7 +61,7 @@ namespace Server.Controllers
                         { "PageSize", "1 to 50" },
                         { "Skip", "0 to 'as many as you want!!'" },
                         { "UseLinq", "i.e. '&UseLinq=true' (will be slower than the default mode)" },
-                        { "UseLeppieExclusions", "See " + urlRoot + "Query/LeppieExcludedTags for the full list" },
+                        { "UseLeppieExclusions", "See " + urlRoot + "/Wildcards/LeppieExpandedTags for the full list" },
                         { "DebugMode", "i.e. '&DebugMode=true'" }
                     },
                     //RelatedTagQueries = new Dictionary<string, string>
@@ -73,8 +73,12 @@ namespace Server.Controllers
                     }.ToArray(),
                     Wildcards = new Dictionary<string, string>
                     {
-                        { urlRoot + "/Wildcard/?wildcards=*c%23*,*java*", "Show all the Tags that matches the given wildcards (comma seperated list, starts-with, end-with or contains only)" },
-                        { urlRoot + "/Wildcard/?wildcards=*c%23,c%23*,.net", "Show all the Tags that matches the given wildcards (comma seperated list, starts-with, end-with or contains only)" },
+                        { urlRoot + "/Wildcards/?wildcards=*c%23*,*java*", "Show all the Tags that matches the given wildcards (comma seperated list, starts-with, end-with or contains only)" },
+                        { urlRoot + "/Wildcards/?wildcards=*c%23,c%23*,.net", "Show all the Tags that matches the given wildcards (comma seperated list, starts-with, end-with or contains only)" },
+                        { urlRoot + "/Wildcards/?useLeppieWildcards=true",
+                            "Show all the Tags that matches the exclusion list from Leppie (see " +
+                            urlRoot + "Wildcards/LeppieExpandedTags and " + urlRoot + "Wildcards/LeppieWildcards for the full list)"
+                        },
                     }.ToArray(),
                 },
                 SetupMessages = Logger.Messages,
