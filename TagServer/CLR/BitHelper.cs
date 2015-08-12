@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace StackOverflowTagServer.CLR
@@ -53,6 +54,10 @@ namespace StackOverflowTagServer.CLR
 
         // whether to operate on stack alloc'd or heap alloc'd array
         private bool useStackAlloc;
+        private int maxAllowedBit;
+        private bool maxAllowedBitSet;
+
+
 
         /// <summary>
         /// Instantiates a BitHelper with a heap alloc'd array of ints
@@ -156,41 +161,64 @@ namespace StackOverflowTagServer.CLR
             int counter = 0;
             for (int i = 0; i < m_array.Length; i++)
             {
-                counter += NumberOfSetBits(m_array[i]);
-                //counter += CountBits(m_array[i]);
-                //counter += (Convert.ToString(m_array[i], 2).ToCharArray().Count(c => c == '1'));
-
-                var value = m_array[i];
-                var method1 = NumberOfSetBits(value);
-                var method2 = CountBits(value);
-                var method3 = Convert.ToString(m_array[i], 2).PadLeft(32, '0').ToCharArray().Count(c => c == '1');
-                var okay = (method1 == method2) && (method2 == method3);
-                if (!okay)
+                if (i == m_array.Length - 1 && maxAllowedBitSet)
                 {
-                    Console.WriteLine("ERROR: method1={0:N0}, method2={1:N0}, method3={2:N0}", method1, method2, method3);
+                    // Special case, don't count the Bits that aren't being used!!
+                    var bitsToUse = maxAllowedBit % IntSize;
+                    var bits = Convert.ToString(m_array[i], 2).PadLeft(IntSize, '0').Reverse().Take(bitsToUse).ToArray();
+                    counter += bits.Count(c => c == '1');
+                }
+                else
+                {
+                    counter += NumberOfSetBits(m_array[i]);
                 }
             }
             return counter;
         }
 
+        /// <summary>
+        /// WARNING: this could be SLOOOOW, it converts each 32-bit value into a char array (i.e. ['1', '0', '1', ...])
+        /// and the gets the positions of all the '1' values from that array
+        /// </summary>
+        /// <returns></returns>
+        internal List<int> GetPositions()
+        {
+            var positions = new List<int>(GetCardinality());
+            for (int intCounter = 0; intCounter < m_array.Length; intCounter++)
+            {
+                var bits = Convert.ToString(m_array[intCounter], 2).PadLeft(IntSize, '0').Reverse().ToArray(); // .ToCharArray();
+                for (int b = 0; b < bits.Length; b++)
+                {
+                    var bit = bits[b];
+                    if (bit == '1')
+                    {
+                        var bitPosition = (intCounter * IntSize) + b;
+                        if (maxAllowedBitSet == false)
+                            positions.Add(bitPosition);
+                        else if (bitPosition < maxAllowedBit)
+                            positions.Add(bitPosition);
+                    }
+                }
+            }
+
+            if (positions.Count != GetCardinality())
+                Console.WriteLine("GetPositions, got {0:N0} positions, expected {1:N0} (from GetCardinality())", positions.Count, GetCardinality());
+
+            return positions;
+        }
+
+        internal void SetMaxAllowedBit(int maxAllowedBit)
+        {
+            this.maxAllowedBit = maxAllowedBit;
+            this.maxAllowedBitSet = true;
+        }
+
         // From http://stackoverflow.com/questions/12171584/what-is-the-fastest-way-to-count-set-bits-in-uint32-in-c-sharp/12175897#12175897
-        int NumberOfSetBits(int i)
+        private int NumberOfSetBits(int i)
         {
             i = i - ((i >> 1) & 0x55555555);
             i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
             return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
-        }
-
-        // From http://stackoverflow.com/questions/12171584/what-is-the-fastest-way-to-count-set-bits-in-uint32-in-c-sharp/12171691#12171691
-        int CountBits(int value)
-        {
-            int count = 0;
-            while (value != 0)
-            {
-                count++;
-                value &= value - 1;
-            }
-            return count;
         }
     }
 }
