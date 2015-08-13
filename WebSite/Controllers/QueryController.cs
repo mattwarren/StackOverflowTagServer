@@ -1,4 +1,5 @@
-﻿using Server.Infrastructure;
+﻿using Ewah;
+using Server.Infrastructure;
 using Shared;
 using StackOverflowTagServer;
 using StackOverflowTagServer.DataStructures;
@@ -38,66 +39,69 @@ namespace Server.Controllers
                 tagExpansionTimer.Stop();
             }
 
-            QueryResult result;
             Stopwatch exclusionBitMapTimer = new Stopwatch();
-            if (queryInfo.UseBitMapIndexes)
+            EwahCompressedBitArray exclusionBitMap = null;
+            if (queryInfo.UseBitMapIndexes && queryInfo.UseLeppieExclusions)
             {
-                if (queryInfo.UseLeppieExclusions)
-                {
-                    exclusionBitMapTimer.Start();
-                    var exclusionBitMap = tagServer.CreateBitMapIndexForExcludedTags(leppieExpandedTags, queryInfo.Type);
-                    exclusionBitMapTimer.Stop();
-                    result = tagServer.ComparisionQueryBitMapIndex(queryInfo, exclusionBitMap);
-                }
-                else
-                {
-                    result = tagServer.ComparisionQueryBitMapIndex(queryInfo);
-                }
+                exclusionBitMapTimer.Start();
+                exclusionBitMap = tagServer.CreateBitMapIndexForExcludedTags(leppieExpandedTags, queryInfo.Type);
+                exclusionBitMapTimer.Stop();
             }
+
+            QueryResult result;
+            var queryTimer = Stopwatch.StartNew();
+            if (queryInfo.UseBitMapIndexes)
+                result = tagServer.ComparisionQueryBitMapIndex(queryInfo, exclusionBitMap);
             else if (queryInfo.UseLinq)
                 result = tagServer.ComparisonQuery(queryInfo, tagsToExclude: leppieExpandedTags);
             else
                 result = tagServer.ComparisonQueryNoLINQ(queryInfo, tagsToExclude: leppieExpandedTags);
+            queryTimer.Stop();
 
+            // Stop the overall timer, as we don't want to include the time taken to create DEBUG info in it
             timer.Stop();
 
             var jsonResults = new Dictionary<string, object>();
             jsonResults.Add("Statistics", GetStatistics(queryInfo, result, timer.Elapsed));
             if (queryInfo.DebugMode)
-                jsonResults.Add("DEBUGGING", GetDebugInfo(queryInfo, result, leppieWildcards, leppieExpandedTags,
-                                                          tagExpansionTimer.Elapsed, exclusionBitMapTimer.Elapsed, timer.Elapsed));
+            {
+                var debugInfo = GetDebugInfo(queryInfo, result,
+                                             leppieWildcards, leppieExpandedTags,
+                                             totalTime: timer.Elapsed,
+                                             queryTime: queryTimer.Elapsed,
+                                             tagsExpansionTime: tagExpansionTimer.Elapsed,
+                                             exclusionBitMapTime: exclusionBitMapTimer.Elapsed);
+                jsonResults.Add("DEBUGGING", debugInfo);
+            }
             jsonResults.Add("Results", result.Questions);
             return jsonResults;
         }
 
         private object GetDebugInfo(QueryInfo queryInfo, QueryResult result, List<string> leppieWildcards, HashSet leppieExpandedTags,
-                                    TimeSpan tagsExpansionTime, TimeSpan exclusionBitMapTime, TimeSpan totalTime)
+                                    TimeSpan totalTime, TimeSpan queryTime, TimeSpan tagsExpansionTime, TimeSpan exclusionBitMapTime)
         {
             return new
             {
-                Tag = queryInfo.Tag,
-                OtherTag = queryInfo.OtherTag,
-                Operator = queryInfo.Operator,
-                QueryType = queryInfo.Type.ToString(),
-                PageSize = queryInfo.PageSize,
-                Skip = queryInfo.Skip,
+                Operator = queryInfo.Operator, // In QueryInfo this is just printed as the number, i.e. "3", rather than "ViewCount"
+                QueryInfo = queryInfo,
                 HttpContext.Current.Request.Path,
                 HttpContext.Current.Request.RawUrl,
-                QueryString = HttpContext.Current.Request.QueryString
-                                                 .ToPairs()
-                                                 .ToDictionary(p => p.Key, p => p.Value),
+                //QueryString = HttpContext.Current.Request.QueryString
+                //                                 .ToPairs()
+                //                                 .ToDictionary(p => p.Key, p => p.Value),
                 TimingsInMilliseconds = new
                 {
                     TotalTime = totalTime.TotalMilliseconds.ToString("N2"),
+                    QueryTime = queryTime.TotalMilliseconds.ToString("N2"),
                     TagsExpansion = tagsExpansionTime.TotalMilliseconds.ToString("N2"),
                     ExclusionBitMap = exclusionBitMapTime.TotalMilliseconds.ToString("N2"),
-                    RemainingTime = (totalTime - tagsExpansionTime - exclusionBitMapTime).TotalMilliseconds.ToString("N2"),
+                    RemainingTime = (totalTime - queryTime - tagsExpansionTime - exclusionBitMapTime).TotalMilliseconds.ToString("N2"),
                 },
                 TagsBeforeExpansion = leppieWildcards.Count,
                 TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
                 InvalidResults = GetInvalidResults(result.Questions, queryInfo.Tag, queryInfo.OtherTag, queryInfo.Type, queryInfo.Operator),
                 ShouldHaveBeenExcludedResults = GetShouldHaveBeenExcludedResults(result.Questions, queryInfo.Type, queryInfo.Operator, leppieExpandedTags),
-                QuestionIds = result.Questions.Select(qu => qu.Id),
+                //QuestionIds = result.Questions.Select(qu => qu.Id),
             };
         }
 
