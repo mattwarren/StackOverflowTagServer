@@ -32,19 +32,21 @@ namespace StackOverflowTagServer.Querying
             IEnumerable<int> query = Enumerable.Empty<int>();
             switch (info.Operator)
             {
-                //Use Intersect for AND, Union for OR and Except for NOT
                 case "AND":
                     query = tag1Query.Intersect(tag2Query);
                     if (tagsToExclude != null)
                         query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
                     break;
-                // TODO Complete this!!
-                //case "AND-NOT":
-                //    break;
+                case "AND-NOT":
+                    query = tag1Query.Except(tag2Query);
+                    if (tagsToExclude != null)
+                        query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
+                    break;
 
                 case "OR":
                     // NOTE: Union on it's own isn't correct, it uses seq1.Concat(seq2).Distinct(),
                     // so it pulls ALL items from seq1, before pulling ANY items from seq2
+
                     // TODO this has a small bug, we can get items out of order as we pull them thru in pairs
                     // if t2 has several items that are larger than t1, t1 will still come out first!!
                     // So algorithm needs to be:
@@ -66,11 +68,12 @@ namespace StackOverflowTagServer.Querying
                         query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
                     break;
 
-                case "NOT":
-                    query = tag1Query.Except(tag2Query);
-                    if (tagsToExclude != null)
-                        query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
-                    break;
+                // TODO Work out what a "NOT" query really means, at the moment it's the same as "AND-NOT"?!
+                //case "NOT":
+                //    query = tag1Query.Except(tag2Query);
+                //    if (tagsToExclude != null)
+                //        query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
+                //    break;
 
                 default:
                     throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", info.Operator ?? "<NULL>"));
@@ -137,9 +140,10 @@ namespace StackOverflowTagServer.Querying
                 case "AND":
                     queryResult = AndQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
                     break;
-                // TODO Complete this!!
-                //case "AND-NOT":
-                //    break;
+
+                case "AND-NOT":
+                    queryResult = AndNotQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
+                    break;
 
                 case "OR":
                     queryResult = OrQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
@@ -148,9 +152,10 @@ namespace StackOverflowTagServer.Querying
                     queryResult = OrNotQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], queryInfo[TagServer.ALL_TAGS_KEY], info.PageSize, info.Skip, tagsToExclude);
                     break;
 
-                case "NOT":
-                    queryResult = NotQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
-                    break;
+                // TODO Work out what a "NOT" query really means, at the moment it's the same as "AND-NOT"?!
+                //case "NOT":
+                //    queryResult = NotQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
+                //    break;
 
                 default:
                     throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", info.Operator ?? "<NULL>"));
@@ -197,6 +202,35 @@ namespace StackOverflowTagServer.Querying
                 else if (andHashSet.Contains(item))
                 {
                     andHashSet.Remove(item);
+                    if (queryResult.ItemsSkipped >= skip)
+                        queryResult.Results.Add(questions[item]);
+                    else
+                        queryResult.ItemsSkipped++;
+                }
+            }
+
+            return queryResult;
+        }
+
+        ComplexQueryResult AndNotQuery(int[] tag1Ids, int[] tag2Ids, int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
+        {
+            var queryResult = new ComplexQueryResult { Results = new List<Question>(pageSize), BaseQueryCounter = 0, ItemsSkipped = 0, ExcludedCounter = 0 };
+
+            // https://github.com/ungood/EduLinq/blob/master/Edulinq/Except.cs#L26-L40
+            var notHashSet = GetCachedHashSet(tag2Ids);
+            foreach (var item in tag1Ids)
+            {
+                if (queryResult.Results.Count >= pageSize)
+                    break;
+
+                queryResult.BaseQueryCounter++;
+
+                if (tagsToExclude != null && questions[item].Tags.Any(t => tagsToExclude.Contains(t)))
+                {
+                    queryResult.ExcludedCounter++;
+                }
+                else if (notHashSet.Add(item))
+                {
                     if (queryResult.ItemsSkipped >= skip)
                         queryResult.Results.Add(questions[item]);
                     else
@@ -307,35 +341,6 @@ namespace StackOverflowTagServer.Querying
                         else
                             queryResult.ItemsSkipped++;
                     }
-                }
-            }
-
-            return queryResult;
-        }
-
-        ComplexQueryResult NotQuery(int[] tag1Ids, int[] tag2Ids, int pageSize, int skip, CLR.HashSet<string> tagsToExclude = null)
-        {
-            var queryResult = new ComplexQueryResult { Results = new List<Question>(pageSize), BaseQueryCounter = 0, ItemsSkipped = 0, ExcludedCounter = 0 };
-
-            // https://github.com/ungood/EduLinq/blob/master/Edulinq/Except.cs#L26-L40
-            var notHashSet = GetCachedHashSet(tag2Ids);
-            foreach (var item in tag1Ids)
-            {
-                if (queryResult.Results.Count >= pageSize)
-                    break;
-
-                queryResult.BaseQueryCounter++;
-
-                if (tagsToExclude != null && questions[item].Tags.Any(t => tagsToExclude.Contains(t)))
-                {
-                    queryResult.ExcludedCounter++;
-                }
-                else if (notHashSet.Add(item))
-                {
-                    if (queryResult.ItemsSkipped >= skip)
-                        queryResult.Results.Add(questions[item]);
-                    else
-                        queryResult.ItemsSkipped++;
                 }
             }
 

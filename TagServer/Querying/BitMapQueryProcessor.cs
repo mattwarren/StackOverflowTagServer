@@ -17,6 +17,16 @@ namespace StackOverflowTagServer.Querying
         private readonly Func<QueryType, TagByQueryBitMapLookup> GetTagByQueryBitMapLookup;
         private readonly TagLookup allTags;
 
+        private static Dictionary<QueryType, Func<Question, string>> queryTypeLookup =
+            new Dictionary<QueryType, Func<Question, string>>
+                {
+                            { QueryType.AnswerCount, qu => qu.AnswerCount.HasValue ? qu.AnswerCount.Value.ToString("N0") : "<NULL>" },
+                            { QueryType.CreationDate, qu => qu.CreationDate.ToString() },
+                            { QueryType.LastActivityDate, qu => qu.LastActivityDate.ToString() },
+                            { QueryType.Score, qu => qu.Score.HasValue ? qu.Score.Value.ToString("N0") : "<NULL>" },
+                            { QueryType.ViewCount, qu => qu.ViewCount.HasValue ? qu.ViewCount.Value.ToString("N0") : "<NULL>" }
+                };
+
         internal BitMapQueryProcessor(List<Question> questions,
                                       TagLookup allTags,
                                       Func<QueryType, TagByQueryLookup> getQueryTypeInfo,
@@ -27,14 +37,14 @@ namespace StackOverflowTagServer.Querying
             this.allTags = allTags;
         }
 
-        internal QueryResult Query(QueryInfo info, EwahCompressedBitArray exclusionBitMap)
+        internal QueryResult Query(QueryInfo info, EwahCompressedBitArray exclusionBitMap = null)
         {
-            var fieldFetcher = queryTypeLookup[info.Type];
             var bitMap = GetTagByQueryBitMapLookup(info.Type);
             var questionLookup = GetTagByQueryLookup(info.Type)[TagServer.ALL_TAGS_KEY];
 
             Logger.Log("Tag \"{0}\" is in {1:N0} Questions, Tag \"{2}\" is in {3:N0} Questions", info.Tag, allTags[info.Tag], info.OtherTag, allTags[info.OtherTag]);
 
+            //var fieldFetcher = queryTypeLookup[info.Type];
             //PrintResults(Enumerable.Range(0, questionLookup.Length), questionLookup, ALL_TAGS_KEY, queryType, fieldFetcher);
             //PrintResults(bitMap[tag1], questionLookup, tag1, queryType, fieldFetcher);
             //PrintResults(bitMap[tag2], questionLookup, tag2, queryType, fieldFetcher);
@@ -73,7 +83,7 @@ namespace StackOverflowTagServer.Querying
                                cloneTimer.Elapsed.TotalMilliseconds, notTimer.Elapsed.TotalMilliseconds, orTimer.Elapsed.TotalMilliseconds);
                     break;
 
-                // TODO Work out what this really means, the LINQ version is "result = tag1Query.Except(tag2Query)"
+                // TODO Work out what a "NOT" query really means, the LINQ version was "result = tag1Query.Except(tag2Query)" (which is the same as AND-NOT?!)
                 //case "NOT":
                 //    var bitMapResult = (EwahCompressedBitArray)tag2BitMap.Clone();
                 //    bitMapResult.Not();
@@ -85,11 +95,13 @@ namespace StackOverflowTagServer.Querying
 
             if (exclusionBitMap != null)
             {
+                var cardinalityBeforeExclusions = bitMapResult.GetCardinality();
                 var exclusionTimer = Stopwatch.StartNew();
                 bitMapResult = bitMapResult.And(exclusionBitMap);
+                //bitMapResult = bitMapResult.AndNot(exclusionBitMap);
                 exclusionTimer.Stop();
-                Logger.Log("Took {0,5:N2} ms to apply the exclusion Bit Map Index (Cardinality={1:N0})",
-                           exclusionTimer.Elapsed.TotalMilliseconds, exclusionBitMap.GetCardinality());
+                Logger.Log("Took {0,5:N2} ms to apply exclusion BitMap (Cardinality={1:N0}), Results Cardinality: Before={2:N0}, After={3:N0}",
+                           exclusionTimer.Elapsed.TotalMilliseconds, exclusionBitMap.GetCardinality(), cardinalityBeforeExclusions, bitMapResult.GetCardinality());
             }
 
             var result = bitMapResult.Skip(info.Skip)
@@ -116,16 +128,6 @@ namespace StackOverflowTagServer.Querying
                 //}
             };
         }
-
-        private static Dictionary<QueryType, Func<Question, string>> queryTypeLookup =
-            new Dictionary<QueryType, Func<Question, string>>
-                {
-                    { QueryType.AnswerCount, qu => qu.AnswerCount.HasValue ? qu.AnswerCount.Value.ToString("N0") : "<NULL>" },
-                    { QueryType.CreationDate, qu => qu.CreationDate.ToString() },
-                    { QueryType.LastActivityDate, qu => qu.LastActivityDate.ToString() },
-                    { QueryType.Score, qu => qu.Score.HasValue ? qu.Score.Value.ToString("N0") : "<NULL>" },
-                    { QueryType.ViewCount, qu => qu.ViewCount.HasValue ? qu.ViewCount.Value.ToString("N0") : "<NULL>" }
-                };
 
         private void PrintResults(IEnumerable<int> bits, int[] questionLookup, string info, QueryType queryType, Func<Question, string> fieldFetcher)
         {

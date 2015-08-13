@@ -99,8 +99,8 @@ namespace Server.Controllers
                 },
                 TagsBeforeExpansion = leppieWildcards.Count,
                 TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
-                InvalidResults = GetInvalidResults(result.Questions, queryInfo.Tag, queryInfo.OtherTag, queryInfo.Type, queryInfo.Operator),
-                ShouldHaveBeenExcludedResults = GetShouldHaveBeenExcludedResults(result.Questions, queryInfo.Type, queryInfo.Operator, leppieExpandedTags),
+                InvalidResults = WebApiApplication.TagServer.Value.GetInvalidResults(result.Questions, queryInfo),
+                ShouldHaveBeenExcludedResults = WebApiApplication.TagServer.Value.GetShouldHaveBeenExcludedResults(result.Questions, queryInfo, leppieExpandedTags),
                 //QuestionIds = result.Questions.Select(qu => qu.Id),
             };
         }
@@ -118,46 +118,6 @@ namespace Server.Controllers
                 },
                 Counters = result.Counters
             };
-        }
-
-        private List<Question> GetInvalidResults(List<Question> results, string tag, string otherTag, QueryType type, string @operator)
-        {
-            var invalidResults = new List<Question>();
-            switch (@operator)
-            {
-                case "AND":
-                    var andMatches = results.Where(q => q.Tags.Any(t => t == tag && t == otherTag));
-                    invalidResults.AddRange(results.Except(andMatches));
-                    break;
-                case "AND-NOT":
-                    var andNotMatches = results.Where(q => q.Tags.Any(t => t == tag && t != otherTag));
-                    invalidResults.AddRange(results.Except(andNotMatches));
-                    break;
-                case "OR":
-                    var orMatches = results.Where(q => q.Tags.Any(t => t == tag || t == otherTag));
-                    invalidResults.AddRange(results.Except(orMatches));
-                    break;
-                case "OR-NOT":
-                    var orNotMatches = results.Where(q => q.Tags.Any(t => t == tag || t != otherTag));
-                    invalidResults.AddRange(results.Except(orNotMatches));
-                    break;
-                case "NOT":
-                    var notMatches = results.Where(q => q.Tags.Any(t => t == tag && t != otherTag));
-                    invalidResults.AddRange(results.Except(notMatches));
-                    break;
-                default:
-                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", @operator ?? "<NULL>"));
-            }
-            return invalidResults;
-        }
-
-        private List<Question> GetShouldHaveBeenExcludedResults(List<Question> results, QueryType type, string @operator,
-                                                                StackOverflowTagServer.CLR.HashSet<string> tagsToExclude)
-        {
-            if (tagsToExclude == null)
-                return new List<Question>();
-
-            return results.Where(q => q.Tags.Any(t => tagsToExclude.Contains(t))).ToList();
         }
 
         private QueryInfo GetQueryInfo(IEnumerable<KeyValuePair<string, string>> queryStringPairs, string tag)

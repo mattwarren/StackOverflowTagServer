@@ -287,6 +287,11 @@ namespace StackOverflowTagServer
             return validator.GetShouldHaveBeenExcludedResults(results, queryInfo, tagsToExclude);
         }
 
+        internal void ValidateExclusionBitMap(EwahCompressedBitArray bitMapIndex, CLR.HashSet<string> expandedTagsNGrams, QueryType queryType)
+        {
+            validator.ValidateExclusionBitMap(bitMapIndex, expandedTagsNGrams, queryType);
+        }
+
         internal List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
         {
             return queryProcessor.BooleanQueryWithExclusionsLINQVersion(type, tag, excludedTags, pageSize, skip);

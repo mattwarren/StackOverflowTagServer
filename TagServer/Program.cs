@@ -50,9 +50,14 @@ namespace StackOverflowTagServer
             //var expandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, new List<string>(new [] { "*c#*" }));
 
             var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, leppieTags, nGrams);
-            var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.AnswerCount);
+            //var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, new List<string>(new[] { "*c#*" }), nGrams);
 
-            TestBitMapIndexQueries(tagServer, bitMapIndex);
+            var queryTypeToTest = QueryType.AnswerCount;
+            var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, queryTypeToTest);
+
+            tagServer.ValidateExclusionBitMap(bitMapIndex, expandedTagsNGrams, queryTypeToTest);
+
+            TestBitMapIndexQueries(tagServer, expandedTagsNGrams, bitMapIndex, queryTypeToTest);
 
             // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
             //GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
@@ -221,27 +226,81 @@ namespace StackOverflowTagServer
             //var bitMapIndexViewCount = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.ViewCount);
         }
 
-        private static void TestBitMapIndexQueries(TagServer tagServer, EwahCompressedBitArray exclusionBitMapIndex)
+        private static void TestBitMapIndexQueries(TagServer tagServer, CLR.HashSet<string> tagsToExclude, EwahCompressedBitArray exclusionBitMapIndex, QueryType queryTypeToTest)
         {
             foreach (var @operator in new[] { "OR", "OR-NOT", "AND", "AND-NOT" })
             {
+                var tagsPairings = new[]
+                {
+                    Tuple.Create("c#", "java"),
+                    Tuple.Create("c#", "jquery"),
+                    Tuple.Create("c#", "javascript"),
+                    Tuple.Create("c#", ".net-3.5"), // large -> small
+                    Tuple.Create(".net-3.5", "c#"), // small -> large
+                };
+
                 using (Utils.SetConsoleColour(ConsoleColor.Green))
                     Logger.Log("Running \"{0}\" Queries", @operator);
 
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "java", Type = QueryType.ViewCount, Operator = @operator });
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = ".net-3.5", Type = QueryType.ViewCount, Operator = @operator });
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = ".net-3.5", OtherTag = "c#", Type = QueryType.ViewCount, Operator = @operator });
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "java", Type = QueryType.ViewCount, Operator = @operator });
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "javascript", Type = QueryType.ViewCount, Operator = @operator });
+                foreach (var pairing in tagsPairings)
+                {
+                    TestBitMapIndexAndValidateResults(
+                            tagServer,
+                            new QueryInfo { Tag = pairing.Item1, OtherTag = pairing.Item2, Type = queryTypeToTest, Operator = @operator });
+                }
 
                 using (Utils.SetConsoleColour(ConsoleColor.Green))
                     Logger.Log("Running \"{0}\" Queries and using an Exclusion Bit Map Index", @operator);
 
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "java", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = ".net-3.5", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = ".net-3.5", OtherTag = "c#", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "java", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
-                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "javascript", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
+                foreach (var pairing in tagsPairings)
+                {
+                    TestBitMapIndexAndValidateResults(
+                            tagServer,
+                            new QueryInfo { Tag = pairing.Item1, OtherTag = pairing.Item2, Type = queryTypeToTest, Operator = @operator },
+                            tagsToExclude: tagsToExclude,
+                            exclusionBitMap: exclusionBitMapIndex);
+                }
+            }
+        }
+
+        private static void TestBitMapIndexAndValidateResults(TagServer tagServer, QueryInfo queryInfo,
+                                                              CLR.HashSet<string> tagsToExclude = null,
+                                                              EwahCompressedBitArray exclusionBitMap = null)
+        {
+            var result = tagServer.ComparisionQueryBitMapIndex(queryInfo, exclusionBitMap);
+            var errors = tagServer.GetInvalidResults(result.Questions, queryInfo);
+
+            if (errors.Any())
+            {
+                using (Utils.SetConsoleColour(ConsoleColor.Red))
+                    Logger.Log("ERROR Running \"{0}\" Query, {1} (out of {2}) results were invalid",
+                               queryInfo.Operator, errors.Count, result.Questions.Count);
+
+                foreach (var qu in errors)
+                {
+                    Logger.Log("  {0,8}: {1}", qu.Id, String.Join(", ", qu.Tags));
+                }
+
+                Logger.Log();
+            }
+
+            if (tagsToExclude != null && exclusionBitMap != null)
+            {
+                var shouldHaveBeenExcluded = tagServer.GetShouldHaveBeenExcludedResults(result.Questions, queryInfo, tagsToExclude);
+
+                if (shouldHaveBeenExcluded.Any())
+                {
+                    using (Utils.SetConsoleColour(ConsoleColor.Red))
+                        Logger.Log("ERROR Running \"{0}\" Query, {1} (out of {2}) questions should have been excluded",
+                                   queryInfo.Operator, shouldHaveBeenExcluded.Count, result.Questions.Count);
+
+                    foreach (var error in shouldHaveBeenExcluded)
+                    {
+                        Logger.Log("  {0,8}: {1} -> {2}", error.Item1.Id, String.Join(", ", error.Item1.Tags), error.Item2);
+                    }
+
+                    Logger.Log();
+                }
             }
         }
 

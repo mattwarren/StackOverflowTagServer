@@ -1,4 +1,5 @@
-﻿using Shared;
+﻿using Ewah;
+using Shared;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -136,6 +137,106 @@ namespace StackOverflowTagServer
 
             Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to SUCCESSFULLY validate {2:N0} items -> {3}",
                                      timer.Elapsed, timer.ElapsedMilliseconds, globalCounter, info);
+        }
+
+        internal List<Question> GetInvalidResults(List<Question> results, QueryInfo queryInfo)
+        {
+            var invalidResults = new List<Question>();
+            switch (queryInfo.Operator)
+            {
+                case "AND":
+                    var andMatches = results.Where(q => q.Tags.Any(t => t == queryInfo.Tag) && q.Tags.Any(t => t == queryInfo.OtherTag));
+                    invalidResults.AddRange(results.Except(andMatches));
+                    break;
+                case "AND-NOT":
+                    var andNotMatches = results.Where(q => q.Tags.Any(t => t == queryInfo.Tag) && q.Tags.All(t => t != queryInfo.OtherTag));
+                    invalidResults.AddRange(results.Except(andNotMatches));
+                    break;
+
+                case "OR":
+                    var orMatches = results.Where(q => q.Tags.Any(t => t == queryInfo.Tag) || q.Tags.Any(t => t == queryInfo.OtherTag));
+                    invalidResults.AddRange(results.Except(orMatches));
+                    break;
+                case "OR-NOT":
+                    var orNotMatches = results.Where(q => q.Tags.Any(t => t == queryInfo.Tag) || q.Tags.All(t => t != queryInfo.OtherTag));
+                    invalidResults.AddRange(results.Except(orNotMatches));
+                    break;
+
+                // TODO Work out what a "NOT" query really means, at the moment it's the same as "AND-NOT"?!
+                //case "NOT":
+                //    var notMatches = results.Where(q => q.Tags.Any(t => t == queryInfo.Tag && t != queryInfo.OtherTag));
+                //    invalidResults.AddRange(results.Except(notMatches));
+                //    break;
+
+                default:
+                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", queryInfo.Operator ?? "<NULL>"));
+            }
+            return invalidResults;
+        }
+
+        internal List<Tuple<Question, string>> GetShouldHaveBeenExcludedResults(List<Question> results, QueryInfo queryInfo, CLR.HashSet<string> tagsToExclude)
+        {
+            var errors = new List<Tuple<Question, string>>();
+            if (tagsToExclude == null)
+                return errors;
+
+            foreach (var result in results)
+            {
+                foreach (var tag in result.Tags)
+                {
+                    if (tagsToExclude.Contains(tag))
+                        errors.Add(Tuple.Create(result, tag));
+                }
+            }
+            return errors;
+        }
+
+        internal void ValidateExclusionBitMap(EwahCompressedBitArray bitMapIndex, CLR.HashSet<string> expandedTagsNGrams, QueryType queryType)
+        {
+            var questionLookup = GetTagByQueryLookup(queryType)[TagServer.ALL_TAGS_KEY];
+            var invalidQuestions = new List<Tuple<Question, string>>();
+            var positions = bitMapIndex.GetPositions();
+            foreach (var position in positions)
+            {
+                var question = questions[questionLookup[position]];
+                foreach (var tag in question.Tags)
+                {
+                    if (expandedTagsNGrams.Contains(tag))
+                        invalidQuestions.Add(Tuple.Create(question, tag));
+                }
+            }
+
+            using (Utils.SetConsoleColour(ConsoleColor.Blue))
+                Logger.Log("Validating Exclusion Bit Map, checked {0:N0} positions for INVALID tags", positions.Count);
+
+            if (invalidQuestions.Any())
+            {
+                using (Utils.SetConsoleColour(ConsoleColor.Red))
+                    Logger.Log("ERROR Validating Exclusion Bit Map, {1} questions should have been excluded", invalidQuestions.Count);
+
+                foreach (var error in invalidQuestions)
+                {
+                    Logger.Log("  {0,8}: {1} -> {2}", error.Item1.Id, String.Join(", ", error.Item1.Tags), error.Item2);
+                }
+            }
+
+            var expectedPositionsBitMap = ((EwahCompressedBitArray)bitMapIndex.Clone());
+            expectedPositionsBitMap.Not();
+            var expectedPositions = expectedPositionsBitMap.GetPositions();
+            foreach (var position in expectedPositions)
+            {
+                var question = questions[questionLookup[position]];
+                if (question.Tags.Any(t => expandedTagsNGrams.Contains(t)) == false)
+                {
+                    using (Utils.SetConsoleColour(ConsoleColor.Red))
+                        Logger.Log("ERROR {0,8}: {1} -> didn't contain ANY excluded tags", question.Id, String.Join(", ", question.Tags));
+                }
+            }
+
+            using (Utils.SetConsoleColour(ConsoleColor.Blue))
+                Logger.Log("Validating Exclusion Bit Map, checked {0:N0} positions for EXPECTED tags", expectedPositions.Count);
+
+            Logger.Log();
         }
     }
 }
