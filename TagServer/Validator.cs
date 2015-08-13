@@ -3,19 +3,96 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
+using StackOverflowTagServer.Querying;
+using StackOverflowTagServer.DataStructures;
+
+using TagByQueryBitMapLookup = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
+using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
+using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 namespace StackOverflowTagServer
 {
-    class Validator
+    internal class Validator
     {
         private readonly List<Question> questions;
+        private readonly TagLookup allTags;
+        private readonly Func<QueryType, TagByQueryLookup> GetTagByQueryLookup;
+        private readonly Func<QueryType, TagByQueryBitMapLookup> GetTagByQueryBitMapLookup;
 
-        public Validator(List<Question> questions)
+        internal Validator(List<Question> questions,
+                                    TagLookup allTags,
+                                    Func<QueryType, TagByQueryLookup> getTagByQueryLookup,
+                                    Func<QueryType, TagByQueryBitMapLookup> getTagByQueryBitMapLookup)
         {
             this.questions = questions;
+            this.allTags = allTags;
+            this.GetTagByQueryLookup = getTagByQueryLookup;
+            this.GetTagByQueryBitMapLookup = getTagByQueryBitMapLookup;
         }
 
-        internal void ValidateItems(Dictionary<string, IEnumerable<int>> itemsToCheck,
+        internal void ValidateTagOrdering()
+        {
+            var validationTimer = Stopwatch.StartNew();
+
+            ValidateItems(GetTagByQueryLookup(QueryType.LastActivityDate).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => qu.LastActivityDate <= prev.LastActivityDate,
+                                    "Tags-" + QueryType.LastActivityDate);
+
+            ValidateItems(GetTagByQueryLookup(QueryType.CreationDate).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => qu.CreationDate <= prev.CreationDate,
+                                    "Tags-" + QueryType.CreationDate);
+
+            ValidateItems(GetTagByQueryLookup(QueryType.Score).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.Score, prev.Score) <= 0,
+                                    "Tags-" + QueryType.Score);
+
+            ValidateItems(GetTagByQueryLookup(QueryType.ViewCount).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.ViewCount, prev.ViewCount) <= 0,
+                                    "Tags-" + QueryType.ViewCount);
+
+            ValidateItems(GetTagByQueryLookup(QueryType.AnswerCount).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                                    (qu, prev) => Nullable.Compare(qu.AnswerCount, prev.AnswerCount) <= 0,
+                                    "Tags-" + QueryType.AnswerCount);
+
+            validationTimer.Stop();
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to VALIDATE the {2:N0} arrays\n",
+                                     validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
+        }
+
+        internal void ValidateBitMapIndexOrdering()
+        {
+            var validationTimer = Stopwatch.StartNew();
+            ValidateItems(GetTagByQueryBitMapLookup(QueryType.LastActivityDate).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                            (qu, prev) => qu.LastActivityDate <= prev.LastActivityDate,
+                            "BitMaps-" + QueryType.LastActivityDate,
+                            questionLookup: GetTagByQueryLookup(QueryType.LastActivityDate)[TagServer.ALL_TAGS_KEY]);
+
+            ValidateItems(GetTagByQueryBitMapLookup(QueryType.CreationDate).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                            (qu, prev) => qu.CreationDate <= prev.CreationDate,
+                            "BitMaps-" + QueryType.CreationDate,
+                            questionLookup: GetTagByQueryLookup(QueryType.CreationDate)[TagServer.ALL_TAGS_KEY]);
+
+            ValidateItems(GetTagByQueryBitMapLookup(QueryType.Score).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                            (qu, prev) => Nullable.Compare(qu.Score, prev.Score) <= 0,
+                            "BitMaps-" + QueryType.Score,
+                            questionLookup: GetTagByQueryLookup(QueryType.Score)[TagServer.ALL_TAGS_KEY]);
+
+            ValidateItems(GetTagByQueryBitMapLookup(QueryType.ViewCount).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                            (qu, prev) => Nullable.Compare(qu.ViewCount, prev.ViewCount) <= 0,
+                            "BitMaps-" + QueryType.ViewCount,
+                            questionLookup: GetTagByQueryLookup(QueryType.ViewCount)[TagServer.ALL_TAGS_KEY]);
+
+            ValidateItems(GetTagByQueryBitMapLookup(QueryType.AnswerCount).ToDictionary(item => item.Key, item => item.Value as IEnumerable<int>),
+                            (qu, prev) => Nullable.Compare(qu.AnswerCount, prev.AnswerCount) <= 0,
+                            "BitMaps-" + QueryType.AnswerCount,
+                            questionLookup: GetTagByQueryLookup(QueryType.AnswerCount)[TagServer.ALL_TAGS_KEY]);
+
+            validationTimer.Stop();
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to VALIDATE all the {2:N0} Bit Map Indexes\n",
+                                     validationTimer.Elapsed, validationTimer.ElapsedMilliseconds, allTags.Count * 5);
+        }
+
+        private void ValidateItems(Dictionary<string, IEnumerable<int>> itemsToCheck,
                                     Func<Question, Question, bool> checker,
                                     string info,
                                     int[] questionLookup = null)

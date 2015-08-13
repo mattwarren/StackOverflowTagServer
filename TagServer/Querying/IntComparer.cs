@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace StackOverflowTagServer
+namespace StackOverflowTagServer.Querying
 {
     class IntComparer : IEqualityComparer<int>
     {

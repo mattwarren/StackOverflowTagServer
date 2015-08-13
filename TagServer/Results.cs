@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace StackOverflowTagServer
 {
-    static class Results
+    internal static class Results
     {
         private static StreamWriter stream;
 

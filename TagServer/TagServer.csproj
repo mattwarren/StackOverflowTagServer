@@ -96,6 +96,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BitMapIndexHandler.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Querying\BaseQueryProcessor.cs" />
     <Compile Include="CLR\BitHelper.cs" />
@@ -108,7 +109,7 @@
     <Compile Include="DataStructures\GCCollectionInfo.cs" />
     <Compile Include="DataStructures\TrieEntry.cs" />
     <Compile Include="DataStructures\Trie`1.cs" />
-    <Compile Include="IntComparer.cs" />
+    <Compile Include="Querying\IntComparer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">

@@ -46,7 +46,7 @@ namespace StackOverflowTagServer
                     fileSteam.Write(BitConverter.GetBytes(tagAsBytes.Length), 0, 4); // write length of the string (in bytes) out first
                     fileSteam.Write(tagAsBytes, 0, tagAsBytes.Length);
 
-                    // Here we could write out the # of bits that have set, then use it as a sanity-check!?!?
+                    // Here we write out the # of bits that have set (Cardinality), then it can be used as a sanity-check during deserialisation
                     fileSteam.Write(BitConverter.GetBytes(item.Value.GetCardinality()), 0, 8); // long is 64-bit, 8 bytes
 
                     bitMapIndexSerialiser.Serialize(fileSteam, item.Value);
