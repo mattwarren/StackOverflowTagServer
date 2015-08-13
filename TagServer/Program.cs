@@ -355,9 +355,9 @@ namespace StackOverflowTagServer
                     info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
                     var result6 = tagServer.ComparisonQueryNoLINQ(info);
 
-                    CompareLists(result1.Questions, "Regular", result4.Questions, "No LINQ");
-                    CompareLists(result2.Questions, "Regular", result5.Questions, "No LINQ");
-                    CompareLists(result3.Questions, "Regular", result6.Questions, "No LINQ");
+                    Utils.CompareLists(result1.Questions, "Regular", result4.Questions, "No LINQ");
+                    Utils.CompareLists(result2.Questions, "Regular", result5.Questions, "No LINQ");
+                    Utils.CompareLists(result3.Questions, "Regular", result6.Questions, "No LINQ");
 
                     Console.ResetColor();
                     Results.StartNewRow();
@@ -387,7 +387,7 @@ namespace StackOverflowTagServer
                 foreach (var count in amounts)
                 {
                     var pageSize = 50;
-                    var excludedTags = SelectNItemsFromList(expandedTagsAsList, count);
+                    var excludedTags = Utils.SelectNItemsFromList(expandedTagsAsList, count);
                     //Logger.LogStartupMessage("Count={0}, excludedTags.Count={1} tags:{2}\n\n", count, excludedTags.Count, string.Join(", ", excludedTags));
                     //continue;
 
@@ -401,9 +401,9 @@ namespace StackOverflowTagServer
                         var results3 = tagServer.BooleanQueryWithExclusionsFastAlternativeVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
                         //var results4 = tagServer.BooleanQueryWithExclusionsBloomFilterVersion(QueryType.Score, ".net", excludedTags, pageSize: pageSize);
 
-                        //CompareLists(listA: results1, nameA: "Slow", listB: results2, nameB: "Fast");
-                        CompareLists(listA: results2, nameA: "Fast", listB: results3, nameB: "FastAlternative");
-                        //CompareLists(listA: results3, nameA: "FastAlternative", listB: results4, nameB: "Bloom");
+                        //Utils.CompareLists(listA: results1, nameA: "Slow", listB: results2, nameB: "Fast");
+                        Utils.CompareLists(listA: results2, nameA: "Fast", listB: results3, nameB: "FastAlternative");
+                        //Utils.CompareLists(listA: results3, nameA: "FastAlternative", listB: results4, nameB: "Bloom");
 
                         Results.StartNewRow();
                     }
@@ -430,27 +430,27 @@ namespace StackOverflowTagServer
             Results.CloseFile();
         }
 
-        private static void RunSimpleQueries()
+        private static void RunSimpleQueries(TagServer tagServer)
         {
-            //var queryTester = new QueryTester(tagServer.Questions);
-            //queryTester.TestAndOrNotQueries();
-            //queryTester.TestQueries();
+            var queryTester = new QueryTester(tagServer.Questions);
+            queryTester.TestAndOrNotQueries();
+            queryTester.TestQueries();
 
-            //Logger.LogStartupMessage("Finished, press <ENTER> to exit");
-            //Console.ReadLine();
-            //return;
+            Logger.LogStartupMessage("Finished, press <ENTER> to exit");
+            Console.ReadLine();
+            return;
 
-            // Regular queries, i.e. single tag, no Boolean operators
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 0);
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 9);
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 10);
+            //Regular queries, i.e.single tag, no Boolean operators
+            tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 0);
+            tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 9);
+            tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 10, skip: 10);
 
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 100, skip: 10000);
-            //tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 100, skip: 1000000);
+            tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 100, skip: 10000);
+            tagServer.Query(QueryType.LastActivityDate, "c#", pageSize: 100, skip: 1000000);
 
-            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 95);
-            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 100);
-            //tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 105);
+            tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 95);
+            tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 100);
+            tagServer.Query(QueryType.Score, ".net", pageSize: 6, skip: 105);
         }
 
         private static void PrintQuestionStats(List<Question> rawQuestions)
@@ -544,51 +544,6 @@ namespace StackOverflowTagServer
                     totalSoFar.ToString("N0").PadRight(8));
             }
         }
-
-#region HelperMethods
-        private static void CompareLists(List<Question> listA, string nameA, List<Question> listB, string nameB)
-        {
-            if (listA.Count != listB.Count)
-                Logger.LogStartupMessage("ERROR: list have different lengths, {0}: {1}, {2}: {3}", nameA, listA.Count, nameB, listB.Count);
-            var AExceptB = listA.Select(r => r.Id).Except(listB.Select(r => r.Id)).ToList();
-            if (AExceptB.Any())
-            {
-                Logger.LogStartupMessage("ERROR: Items in {0}, but not in {1}: {2}\n", nameA, nameB,
-                                  string.Join(", ", AExceptB.Select(r => string.Format("[{0}]={1}", listA.FindIndex(s => s.Id == r), r))));
-            }
-            var BExceptA = listB.Select(r => r.Id).Except(listA.Select(r => r.Id)).ToList();
-            if (BExceptA.Any())
-            {
-                Logger.LogStartupMessage("ERROR: Items in {0}, but not in {1}: {2}\n", nameB, nameA,
-                                  string.Join(", ", BExceptA.Select(r => string.Format("[{0}]={1}", listB.FindIndex(s => s.Id == r), r))));
-            }
-
-            //foreach (var item in Enumerable.Range(0, Math.Min(listA.Count, listB.Count)))
-            //{
-            //    if (listA[item].Id != listB[item].Id)
-            //        Logger.LogStartupMessage("ERROR: lists differ at position[{0}], {1} Id: {2}, {3} Id: {4}",
-            //                          item, nameA, listA[item].Id, nameB, listB[item].Id);
-            //}
-        }
-
-        private static List<string> SelectNItemsFromList(List<string> expandedTags, int count)
-        {
-            if (count == expandedTags.Count)
-                return expandedTags;
-            else
-            {
-                var result = new List<string>(count);
-                var step = expandedTags.Count / count;
-                int i = 0;
-                while (i < expandedTags.Count && (result.Count < count))
-                {
-                    result.Add(expandedTags[i]);
-                    i += step;
-                }
-                return result;
-            }
-        }
-#endregion #region HelperMethods
     }
 }
 // ReSharper restore LocalizableElement
