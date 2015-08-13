@@ -52,8 +52,6 @@ namespace StackOverflowTagServer
 
             var allQuestions = tagLookupForQueryType[TagServer.ALL_TAGS_KEY];
             var reverseMode = excludedQuestionIds.Count < (questions.Count / 2);
-            //var allQuestionLookup = allQuestions.Select((quId, index) => new { quId, index }).ToDictionary(i => i.quId, i => i.index);
-            //var reverseMode = true;
 
             var setBitsTimer = Stopwatch.StartNew();
             for (int index = 0; index < allQuestions.Length; index++)
@@ -69,30 +67,6 @@ namespace StackOverflowTagServer
                     Logger.LogStartupMessage("Error, unable to set bit {0:N0} (SizeInBits = {1:N0})", index, bitMap.SizeInBits);
             }
 
-            //for (int index = 0; index < allQuestions.Length; index++)
-            //{
-            //    var qu = questions[index];
-            //    for (int t = 0; t < qu.Tags.Count; t++)
-            //    {
-            //        var tag = qu.Tags[t];
-            //        if (tagsToExclude.Contains(tag))
-            //        {
-            //            bitMap.Set(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-            //            break; // Stop iterating through tags, we know we can't use this question
-            //        }
-            //    }
-            //}
-            //bitMap.Not(); // in-place
-
-            // This is much slower 1,169 ms v. 340 ms (probably the sorting and creating the lookup!!!)
-            //var allQuestionLookup = allQuestions.Select((quId, index) => new { quId, index }).ToDictionary(i => i.quId, i => i.index);
-            //foreach (var item in excludedQuestionIds.Select(quId => new { quId, index = allQuestionLookup[quId] }).OrderBy(i => i.index))
-            //{
-            //    bool wasSet = bitMap.Set(item.index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-
-            //    if (wasSet == false)
-            //        Logger.LogStartupMessage("Error, unable to set bit {0:N0} (SizeInBits = {1:N0})", item.index, bitMap.SizeInBits);
-            //}
             setBitsTimer.Stop();
 
             var alternativeBitSetTimer = Stopwatch.StartNew();
@@ -110,46 +84,7 @@ namespace StackOverflowTagServer
                     bitSet.MarkBit(index); // Directly set a bit where you CAN use the question (won't do a NOT afterwards)
             }
 
-            //for (int index = 0; index < allQuestions.Length; index++)
-            //{
-            //    var qu = questions[index];
-            //    for (int t = 0; t < qu.Tags.Count; t++)
-            //    {
-            //        var tag = qu.Tags[t];
-            //        if (tagsToExclude.Contains(tag))
-            //        {
-            //            bitSet.MarkBit(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-            //            break; // Stop iterating through tags, we know we can't use this question
-            //        }
-            //    }
-            //}
-            //bitSet.Not(); // in-place
-
-            // This is also MUCH sloower, 2,707 ms v. 378 ms (mostly down to the time taken to make the lookup!!)
-            //var allQuestionLookup = allQuestions.Select((quId, index) => new { quId, index }).ToDictionary(i => i.quId, i => i.index);
-            //foreach (var questionId in excludedQuestionIds)
-            //{
-            //    var index = allQuestionLookup[questionId];
-            //    bitSet.MarkBit(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-            //}
             alternativeBitSetTimer.Stop();
-
-            //var bitMapSizeBefore = (long)bitMap.GetCardinality();
-            //var bitSetSizeBefore = (long)bitSet.GetCardinality();
-            //var diffBefore = bitMapSizeBefore - bitSetSizeBefore;
-            //if (bitMapSizeBefore != bitSetSizeBefore) // && bitMap.GetCardinality() < 7000000)
-            //{
-            //    var bitMapPositions = bitMap.GetPositions();
-            //    var bitSetPositions = bitSet.GetPositions();
-
-            //    var inFirstButNotInSecond = new HashSet<int>(bitMapPositions).Except(bitSetPositions).ToList();
-            //    var inSecondButNotInFirst = new HashSet<int>(bitSetPositions).Except(bitMapPositions).ToList();
-            //    var tempHashSet = new HashSet<int>(bitMapPositions);
-            //    tempHashSet.IntersectWith(bitSetPositions);
-            //    var inBoth = tempHashSet.ToList();
-
-            //    var temp = 5;
-            //}
 
             var tidyUpTimer = Stopwatch.StartNew();
             bitMap.SetSizeInBits(questions.Count, defaultvalue: false);
@@ -165,23 +100,6 @@ namespace StackOverflowTagServer
             notTimer.Stop();
 
             bitMapTimer.Stop();
-
-            //var bitMapSizeAfter = (long)bitMap.GetCardinality();
-            //var bitSetSizeAfter = (long)bitSet.GetCardinality();
-            //var diffAfter = bitMapSizeAfter - bitSetSizeAfter;
-            //if (bitMapSizeAfter != bitSetSizeAfter)
-            //{
-            //    var bitMapPositions = bitMap.GetPositions();
-            //    var bitSetPositions = bitSet.GetPositions();
-
-            //    var inFirstButNotInSecond = new HashSet<int>(bitMapPositions).Except(bitSetPositions).ToList();
-            //    var inSecondButNotInFirst = new HashSet<int>(bitSetPositions).Except(bitMapPositions).ToList();
-            //    var tempHashSet = new HashSet<int>(bitMapPositions);
-            //    tempHashSet.IntersectWith(bitSetPositions);
-            //    var inBoth = tempHashSet.ToList();
-
-            //    var temp = 5;
-            //}
 
             Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to collect {2:N0} Question Ids from {3:N0} Tags",
                                      collectIdsTimer.Elapsed, collectIdsTimer.ElapsedMilliseconds, excludedQuestionIds.Count, tagsToExclude.Count);
