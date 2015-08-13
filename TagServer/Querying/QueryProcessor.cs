@@ -11,15 +11,15 @@ namespace StackOverflowTagServer.Querying
 {
     internal class QueryProcessor : BaseQueryProcessor
     {
-        internal QueryProcessor(List<Question> questions, Func<QueryType, TagByQueryLookup> getQueryTypeInfo)
-            : base(questions, getQueryTypeInfo)
+        internal QueryProcessor(List<Question> questions, Func<QueryType, TagByQueryLookup> getTagByQueryLookup)
+            : base(questions, getTagByQueryLookup)
         {
         }
 
         internal List<Question> Query(QueryType type, string tag, int pageSize, int skip)
         {
             var timer = Stopwatch.StartNew();
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetTagByQueryLookup(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -47,7 +47,7 @@ namespace StackOverflowTagServer.Querying
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
 
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetTagByQueryLookup(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -88,7 +88,7 @@ namespace StackOverflowTagServer.Querying
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
 
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetTagByQueryLookup(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -133,7 +133,7 @@ namespace StackOverflowTagServer.Querying
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
 
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetTagByQueryLookup(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
@@ -191,7 +191,7 @@ namespace StackOverflowTagServer.Querying
             var gcInfo = new GCCollectionInfo();
             var timer = Stopwatch.StartNew();
 
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(type);
+            TagByQueryLookup queryInfo = GetTagByQueryLookup(type);
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 

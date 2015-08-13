@@ -1,4 +1,5 @@
-﻿using Shared;
+﻿using Ewah;
+using Shared;
 using StackOverflowTagServer.DataStructures;
 using StackOverflowTagServer.Querying;
 using System;
@@ -37,24 +38,6 @@ namespace StackOverflowTagServer
             //PrintQuestionStats(rawQuestions);
             //PrintTagStats(tagServer.AllTags);
 
-            foreach (var @operator in new[] { "OR", "OR NOT", "AND", "AND NOT" })
-            {
-                using (Utils.SetConsoleColour(ConsoleColor.Green))
-                    Logger.Log("\nRunning \"{0}\" Queries", @operator);
-
-                tagServer.TestBitMapIndexes(tag1: "c#", tag2: "java", queryType: QueryType.ViewCount, @operator: @operator);
-                tagServer.TestBitMapIndexes(tag1: "c#", tag2: ".net-3.5", queryType: QueryType.ViewCount, @operator: @operator);
-                tagServer.TestBitMapIndexes(tag1: ".net-3.5", tag2: "c#", queryType: QueryType.ViewCount, @operator: @operator);
-                tagServer.TestBitMapIndexes(tag1: "c#", tag2: "java", queryType: QueryType.ViewCount, @operator: @operator);
-                tagServer.TestBitMapIndexes(tag1: "c#", tag2: "javascript", queryType: QueryType.ViewCount, @operator: @operator);
-
-                //tagServer.TestBitMapIndexes(tag1: "c#", tag2: "java", queryType: QueryType.Score, @operator: @operator);
-                //tagServer.TestBitMapIndexes(tag1: "c#", tag2: ".net-3.5", queryType: QueryType.Score, @operator: @operator);
-                //tagServer.TestBitMapIndexes(tag1: ".net-3.5", tag2: "c#", queryType: QueryType.Score, @operator: @operator);
-                //tagServer.TestBitMapIndexes(tag1: "c#", tag2: "java", queryType: QueryType.Score, @operator: @operator);
-                //tagServer.TestBitMapIndexes(tag1: "c#", tag2: "javascript", queryType: QueryType.Score, , @operator: @operator);
-            }
-
             //RunComparisonQueries(tagServer);
             //return;
 
@@ -64,19 +47,27 @@ namespace StackOverflowTagServer
             // <.net> and <c#> aren't in this lists, so they can be valid tags!
             var leppieTags = Utils.GetLeppieTagsFromResource();
             //var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
-
             //var expandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, new List<string>(new [] { "*c#*" }));
 
-            TestWildcards(tagServer, nGrams, "*c#*");
-            TestWildcards(tagServer, nGrams, "*c#", "c#*");
-            TestWildcards(tagServer, nGrams, "*c#");
-            TestWildcards(tagServer, nGrams, "c#*");
-            TestWildcards(tagServer, nGrams, "c#-2.0");
-            TestWildcards(tagServer, nGrams, leppieTags.ToArray());
-            TestWildcards(tagServer, nGrams, "*"); // INCLUDE all Tags
+            var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, leppieTags, nGrams);
+            var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.AnswerCount);
+
+            TestBitMapIndexQueries(tagServer, bitMapIndex);
 
             // Get some interesting stats on Leppie's Tag (how many qu's the cover/exclude, etc)
             //GetLeppieTagInfo(rawQuestions, tagServer.AllTags, leppieTags, leppieExpandedTags);
+
+            return;
+
+            // TODO currently it takes too long to create the Bit Map Index (expanding the wildcards to tag is fast though)
+            // Either the Bit Map has to be cached OR we need to find a faster way of populating it
+            TestWildcards(tagServer, nGrams, "*c#*");
+            //TestWildcards(tagServer, nGrams, "*c#", "c#*");
+            //TestWildcards(tagServer, nGrams, "*c#");
+            //TestWildcards(tagServer, nGrams, "c#*");
+            //TestWildcards(tagServer, nGrams, "c#-2.0");
+            TestWildcards(tagServer, nGrams, leppieTags.ToArray());
+            //TestWildcards(tagServer, nGrams, "*"); // INCLUDE all Tags
 
             //RunExclusionQueryTests(tagServer, leppieExpandedTags, runsPerLoop: 10);
 
@@ -176,9 +167,14 @@ namespace StackOverflowTagServer
             if (tagsToExpand.Count == 1 && tagsToExpand[0] == "*")
             {
                 // special case!!
+                using (Utils.SetConsoleColour(ConsoleColor.Green))
+                    Logger.Log("\nTestWildcards: special case, using ALL Tags", String.Join(", ", tagsToExpand));
                 var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(new CLR.HashSet<string>(tagServer.AllTags.Keys), QueryType.AnswerCount);
                 return;
             }
+
+            using (Utils.SetConsoleColour(ConsoleColor.Green))
+                Logger.Log("\nTestWildcards: {0}\n", String.Join(", ", tagsToExpand.Where(t => t.Contains('*'))));
 
             var timer = Stopwatch.StartNew();
             var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, tagsToExpand, nGrams);
@@ -218,11 +214,35 @@ namespace StackOverflowTagServer
             Logger.LogStartupMessage("\nIn NGrams but not in Contains: " + string.Join(", ", expandedTagsNGrams.Except(expandTagsContains)));
             Logger.LogStartupMessage();
 
-            var bitMapIndex1 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.AnswerCount);
-            //var bitMapIndex2 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.CreationDate);
-            //var bitMapIndex3 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.LastActivityDate);
-            //var bitMapIndex4 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.Score);
-            //var bitMapIndex5 = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.ViewCount);
+            var bitMapIndexAnswerCount = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.AnswerCount);
+            //var bitMapIndexCreationDate = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.CreationDate);
+            //var bitMapIndexLastActivityDate = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.LastActivityDate);
+            //var bitMapIndexScore = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.Score);
+            //var bitMapIndexViewCount = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.ViewCount);
+        }
+
+        private static void TestBitMapIndexQueries(TagServer tagServer, EwahCompressedBitArray exclusionBitMapIndex)
+        {
+            foreach (var @operator in new[] { "OR", "OR NOT", "AND", "AND NOT" })
+            {
+                using (Utils.SetConsoleColour(ConsoleColor.Green))
+                    Logger.Log("Running \"{0}\" Queries", @operator);
+
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "java", Type = QueryType.ViewCount, Operator = @operator });
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = ".net-3.5", Type = QueryType.ViewCount, Operator = @operator });
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = ".net-3.5", OtherTag = "c#", Type = QueryType.ViewCount, Operator = @operator });
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "java", Type = QueryType.ViewCount, Operator = @operator });
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "javascript", Type = QueryType.ViewCount, Operator = @operator });
+
+                using (Utils.SetConsoleColour(ConsoleColor.Green))
+                    Logger.Log("Running \"{0}\" Queries and using an Exclusion Bit Map Index", @operator);
+
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "java", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = ".net-3.5", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = ".net-3.5", OtherTag = "c#", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "java", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
+                tagServer.ComparisionQueryBitMapIndex(new QueryInfo { Tag = "c#", OtherTag = "javascript", Type = QueryType.ViewCount, Operator = @operator }, exclusionBitMapIndex);
+            }
         }
 
         private static void RunComparisonQueries(TagServer tagServer)

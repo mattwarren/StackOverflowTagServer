@@ -12,15 +12,15 @@ namespace StackOverflowTagServer.Querying
 {
     internal class ComplexQueryProcessor : BaseQueryProcessor
     {
-        internal ComplexQueryProcessor(List<Question> questions, Func<QueryType, TagByQueryLookup> getQueryTypeInfo)
-            : base(questions, getQueryTypeInfo)
+        internal ComplexQueryProcessor(List<Question> questions, Func<QueryType, TagByQueryLookup> getTagByQueryLookup)
+            : base(questions, getTagByQueryLookup)
         {
         }
 
         internal QueryResult Query(QueryInfo info, CLR.HashSet<string> tagsToExclude = null)
         {
             var timer = Stopwatch.StartNew();
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(info.Type);
+            TagByQueryLookup queryInfo = GetTagByQueryLookup(info.Type);
             ThrowIfInvalidParameters(info.Tag, info.PageSize, queryInfo);
             ThrowIfInvalidParameters(info.OtherTag, info.PageSize, queryInfo);
 
@@ -127,7 +127,7 @@ namespace StackOverflowTagServer.Querying
         internal QueryResult QueryNoLINQ(QueryInfo info, CLR.HashSet<string> tagsToExclude = null)
         {
             var timer = Stopwatch.StartNew();
-            TagByQueryLookup queryInfo = GetQueryTypeInfo(info.Type);
+            TagByQueryLookup queryInfo = GetTagByQueryLookup(info.Type);
             ThrowIfInvalidParameters(info.Tag, info.PageSize, queryInfo);
             ThrowIfInvalidParameters(info.OtherTag, info.PageSize, queryInfo);
 

@@ -99,6 +99,7 @@
     <Compile Include="Logger.cs" />
     <Compile Include="Querying\BaseQueryProcessor.cs" />
     <Compile Include="CLR\BitHelper.cs" />
+    <Compile Include="Querying\BitMapQueryProcessor.cs" />
     <Compile Include="Querying\ComplexQueryProcessor.cs" />
     <Compile Include="DataStructures\DisposableAction.cs" />
     <Compile Include="CLR\HashHelpers.cs" />

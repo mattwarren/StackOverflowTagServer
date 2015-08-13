@@ -2,7 +2,6 @@
 using StackOverflowTagServer.DataStructures;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
 
@@ -14,12 +13,12 @@ namespace StackOverflowTagServer.Querying
     internal class BaseQueryProcessor
     {
         protected readonly List<Question> questions;
-        protected readonly Func<QueryType, TagByQueryLookup> GetQueryTypeInfo;
+        protected readonly Func<QueryType, TagByQueryLookup> GetTagByQueryLookup;
 
-        internal BaseQueryProcessor(List<Question> questions, Func<QueryType, TagByQueryLookup> getQueryTypeInfo)
+        internal BaseQueryProcessor(List<Question> questions, Func<QueryType, TagByQueryLookup> getTagByQueryLookup)
         {
             this.questions = questions;
-            this.GetQueryTypeInfo = getQueryTypeInfo;
+            this.GetTagByQueryLookup = getTagByQueryLookup;
         }
 
         protected readonly Lazy<HashSet> HashSetCache = new Lazy<HashSet>(() =>
