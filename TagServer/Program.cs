@@ -223,7 +223,7 @@ namespace StackOverflowTagServer
 
         private static void TestBitMapIndexQueries(TagServer tagServer, EwahCompressedBitArray exclusionBitMapIndex)
         {
-            foreach (var @operator in new[] { "OR", "OR NOT", "AND", "AND NOT" })
+            foreach (var @operator in new[] { "OR", "OR-NOT", "AND", "AND-NOT" })
             {
                 using (Utils.SetConsoleColour(ConsoleColor.Green))
                     Logger.Log("Running \"{0}\" Queries", @operator);

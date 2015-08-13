@@ -44,35 +44,43 @@ namespace StackOverflowTagServer.Querying
             var tag2BitMap = bitMap[info.OtherTag];
             EwahCompressedBitArray bitMapResult = new EwahCompressedBitArray();
 
-            if (info.Operator == "OR")
+            switch (info.Operator)
             {
-                bitMapResult = tag1BitMap.Or(tag2BitMap);
-            }
-            else if (info.Operator == "OR NOT")
-            {
-                // TODO see if it's possible to write a custom OrNot() function (could use AndNot() as a starting point?)
-                var cloneTimer = Stopwatch.StartNew();
-                var notTag2BitMap = (EwahCompressedBitArray)tag2BitMap.Clone();
-                cloneTimer.Stop();
+                case "AND":
+                    bitMapResult = tag1BitMap.And(tag2BitMap);
+                    break;
+                case "AND-NOT":
+                    bitMapResult = tag1BitMap.AndNot(tag2BitMap);
+                    break;
+                case "OR":
+                    bitMapResult = tag1BitMap.Or(tag2BitMap);
+                    break;
+                case "OR-NOT": //"i.e. .net+or+jquery-"
+                    // TODO see if it's possible to write a custom OrNot() function (could use AndNot() as a starting point?)
+                    var cloneTimer = Stopwatch.StartNew();
+                    var notTag2BitMap = (EwahCompressedBitArray)tag2BitMap.Clone();
+                    cloneTimer.Stop();
 
-                var notTimer = Stopwatch.StartNew();
-                notTag2BitMap.Not();
-                notTimer.Stop();
+                    var notTimer = Stopwatch.StartNew();
+                    notTag2BitMap.Not();
+                    notTimer.Stop();
 
-                var orTimer = Stopwatch.StartNew();
-                bitMapResult = tag1BitMap.Or(notTag2BitMap);
-                orTimer.Stop();
+                    var orTimer = Stopwatch.StartNew();
+                    bitMapResult = tag1BitMap.Or(notTag2BitMap);
+                    orTimer.Stop();
 
-                Logger.Log("CLONING took {0:N2} ms, NOT took {1:N2} ms, OR took {2:N2} ms",
-                           cloneTimer.Elapsed.TotalMilliseconds, notTimer.Elapsed.TotalMilliseconds, orTimer.Elapsed.TotalMilliseconds);
-            }
-            else if (info.Operator == "AND")
-            {
-                bitMapResult = tag1BitMap.And(tag2BitMap);
-            }
-            else if (info.Operator == "AND NOT")
-            {
-                bitMapResult = tag1BitMap.AndNot(tag2BitMap);
+                    Logger.Log("CLONING took {0:N2} ms, NOT took {1:N2} ms, OR took {2:N2} ms",
+                               cloneTimer.Elapsed.TotalMilliseconds, notTimer.Elapsed.TotalMilliseconds, orTimer.Elapsed.TotalMilliseconds);
+                    break;
+
+                // TODO Work out what this really means, the LINQ version is "result = tag1Query.Except(tag2Query)"
+                //case "NOT":
+                //    var bitMapResult = (EwahCompressedBitArray)tag2BitMap.Clone();
+                //    bitMapResult.Not();
+                //    break;
+
+                default:
+                    throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", info.Operator ?? "<NULL>"));
             }
 
             if (exclusionBitMap != null)

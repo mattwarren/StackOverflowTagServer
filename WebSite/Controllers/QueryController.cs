@@ -20,17 +20,18 @@ namespace Server.Controllers
         [HttpGet]
         public object Query(string tag)
         {
-            var queryInfo = GetQueryInfo(HttpContext.Current.Request.QueryString.ToPairs(), tag);
-
             // This timer must include everything!! (i.e processing the wildcards and doing the query!!)
             var timer = Stopwatch.StartNew();
+
+            var queryInfo = GetQueryInfo(HttpContext.Current.Request.QueryString.ToPairs(), tag);
+            var tagServer = WebApiApplication.TagServer.Value;
 
             var leppieWildcards = WebApiApplication.LeppieWildcards.Value;
             HashSet leppieExpandedTags = null;
             var tagExpansionTimer = new Stopwatch();
             if (queryInfo.UseLeppieExclusions)
             {
-                var allTags = WebApiApplication.TagServer.Value.AllTags;
+                var allTags = tagServer.AllTags;
                 var nGrams = WebApiApplication.NGrams.Value;
                 tagExpansionTimer = Stopwatch.StartNew();
                 leppieExpandedTags = WildcardProcessor.ExpandTagsNGrams(allTags, leppieWildcards, nGrams);
@@ -38,24 +39,39 @@ namespace Server.Controllers
             }
 
             QueryResult result;
-            if (queryInfo.UseLinq)
-                result = WebApiApplication.TagServer.Value.ComparisonQuery(queryInfo, tagsToExclude: leppieExpandedTags);
+            Stopwatch exclusionBitMapTimer = new Stopwatch();
+            if (queryInfo.UseBitMapIndexes)
+            {
+                if (queryInfo.UseLeppieExclusions)
+                {
+                    exclusionBitMapTimer.Start();
+                    var exclusionBitMap = tagServer.CreateBitMapIndexForExcludedTags(leppieExpandedTags, queryInfo.Type);
+                    exclusionBitMapTimer.Stop();
+                    result = tagServer.ComparisionQueryBitMapIndex(queryInfo, exclusionBitMap);
+                }
+                else
+                {
+                    result = tagServer.ComparisionQueryBitMapIndex(queryInfo);
+                }
+            }
+            else if (queryInfo.UseLinq)
+                result = tagServer.ComparisonQuery(queryInfo, tagsToExclude: leppieExpandedTags);
             else
-                result = WebApiApplication.TagServer.Value.ComparisonQueryNoLINQ(queryInfo, tagsToExclude: leppieExpandedTags);
+                result = tagServer.ComparisonQueryNoLINQ(queryInfo, tagsToExclude: leppieExpandedTags);
 
             timer.Stop();
 
             var jsonResults = new Dictionary<string, object>();
             jsonResults.Add("Statistics", GetStatistics(queryInfo, result, timer.Elapsed));
             if (queryInfo.DebugMode)
-                jsonResults.Add("DEBUGGING", GetDebugInfo(queryInfo, result, tagExpansionTimer.Elapsed, timer.Elapsed, leppieWildcards, leppieExpandedTags));
+                jsonResults.Add("DEBUGGING", GetDebugInfo(queryInfo, result, leppieWildcards, leppieExpandedTags,
+                                                          tagExpansionTimer.Elapsed, exclusionBitMapTimer.Elapsed, timer.Elapsed));
             jsonResults.Add("Results", result.Questions);
             return jsonResults;
-        }        
+        }
 
-        private object GetDebugInfo(QueryInfo queryInfo, QueryResult result,
-                                    TimeSpan tagsExpansionTime, TimeSpan totalTime,
-                                    List<string> leppieWildcards, HashSet leppieExpandedTags)
+        private object GetDebugInfo(QueryInfo queryInfo, QueryResult result, List<string> leppieWildcards, HashSet leppieExpandedTags,
+                                    TimeSpan tagsExpansionTime, TimeSpan exclusionBitMapTime, TimeSpan totalTime)
         {
             return new
             {
@@ -74,7 +90,8 @@ namespace Server.Controllers
                 {
                     TotalTime = totalTime.TotalMilliseconds.ToString("N2"),
                     TagsExpansion = tagsExpansionTime.TotalMilliseconds.ToString("N2"),
-                    RemainingTime = (totalTime - tagsExpansionTime).TotalMilliseconds.ToString("N2"),
+                    ExclusionBitMap = exclusionBitMapTime.TotalMilliseconds.ToString("N2"),
+                    RemainingTime = (totalTime - tagsExpansionTime - exclusionBitMapTime).TotalMilliseconds.ToString("N2"),
                 },
                 TagsBeforeExpansion = leppieWildcards.Count,
                 TagsAfterExpansion = leppieExpandedTags != null ? leppieExpandedTags.Count : 0,
@@ -152,6 +169,8 @@ namespace Server.Controllers
                 Operator = QueryStringProcessor.GetString(queryStringPairs, "operator", "AND"),
 
                 UseLinq = QueryStringProcessor.GetBool(queryStringPairs, "useLinq", false),
+                UseBitMapIndexes = QueryStringProcessor.GetBool(queryStringPairs, "bitMapIndex", false),
+
                 UseLeppieExclusions = QueryStringProcessor.GetBool(queryStringPairs, "leppieExclusions", false),
                 DebugMode = QueryStringProcessor.GetBool(queryStringPairs, "debugMode", false)
             };

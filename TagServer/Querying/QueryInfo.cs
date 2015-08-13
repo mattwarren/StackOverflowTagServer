@@ -12,6 +12,8 @@ namespace StackOverflowTagServer.Querying
             Operator = "AND";
 
             UseLinq = false;
+            UseBitMapIndexes = false;
+
             UseLeppieExclusions = false;
             DebugMode = false;
     }
@@ -25,8 +27,8 @@ namespace StackOverflowTagServer.Querying
         public string Operator { get; set; }
 
         public bool UseLinq { get; set; }
+        public bool UseBitMapIndexes { get; set; }
         public bool UseLeppieExclusions { get; set; }
-
         public bool DebugMode { get; set; }
     }
 }
