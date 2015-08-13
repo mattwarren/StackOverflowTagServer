@@ -42,9 +42,11 @@ namespace Server.Infrastructure
             if (parameters.Any(p => p.Key.ToLowerInvariant() == name.ToLowerInvariant()))
             {
                 var match = parameters.First(p => p.Key.ToLowerInvariant() == name.ToLowerInvariant());
-                if (String.Compare(match.Value, "true", ignoreCase: true) == 0)
+                if (String.IsNullOrEmpty(match.Value))
                     return true;
-                if (String.Compare(match.Value, "false", ignoreCase: true) == 0)
+                else if (String.Compare(match.Value, "true", ignoreCase: true) == 0)
+                    return true;
+                else if (String.Compare(match.Value, "false", ignoreCase: true) == 0)
                     return false;
             }
             return defaultValue;
