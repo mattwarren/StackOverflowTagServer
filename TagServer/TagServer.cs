@@ -10,7 +10,7 @@ using System.IO;
 using System.Linq;
 
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
-using TagByQueryBitMapIndex = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
+using TagByQueryBitMapLookup = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
 using TagLookup = System.Collections.Generic.Dictionary<string, int>;
 
 namespace StackOverflowTagServer
@@ -36,15 +36,17 @@ namespace StackOverflowTagServer
         private readonly TagByQueryLookup tagsByViewCount;
 
         // GetTagBitMapIndexForQueryType(QueryType type) maps these Dictionaries to a QueryType (enum)
-        private readonly TagByQueryBitMapIndex tagsByAnswerCountBitMapIndex;
-        private readonly TagByQueryBitMapIndex tagsByCreationDateBitMapIndex;
-        private readonly TagByQueryBitMapIndex tagsByLastActivityDateBitMapIndex;
-        private readonly TagByQueryBitMapIndex tagsByScoreBitMapIndex;
-        private readonly TagByQueryBitMapIndex tagsByViewCountBitMapIndex;
+        private readonly TagByQueryBitMapLookup tagsByAnswerCountBitMapIndex;
+        private readonly TagByQueryBitMapLookup tagsByCreationDateBitMapIndex;
+        private readonly TagByQueryBitMapLookup tagsByLastActivityDateBitMapIndex;
+        private readonly TagByQueryBitMapLookup tagsByScoreBitMapIndex;
+        private readonly TagByQueryBitMapLookup tagsByViewCountBitMapIndex;
 
         private readonly QueryProcessor queryProcessor;
 
         private readonly ComplexQueryProcessor complexQueryProcessor;
+
+        private readonly BitMapQueryProcessor bitMapQueryProcessor;
 
         public static List<Question> GetRawQuestionsFromDisk(string folder, string filename)
         {
@@ -102,7 +104,7 @@ namespace StackOverflowTagServer
 
         /// <summary>
         /// Factory method to create a <see cref="TagServer"/>, uses the private Constructor
-        /// <see cref="TagServer(List{Question}, TagLookup, Dictionary{QueryType, TagByQueryLookup}, Dictionary{QueryType, TagByQueryBitMapIndex})"/>
+        /// <see cref="TagServer(List{Question}, TagLookup, Dictionary{QueryType, TagByQueryLookup}, Dictionary{QueryType, TagByQueryBitMapLookup})"/>
         /// </summary>
         public static TagServer CreateFromSerialisedData(List<Question> rawQuestions, string intermediateFilesFolder, bool deserialiseBitMapsIndexes = true)
         {
@@ -110,7 +112,7 @@ namespace StackOverflowTagServer
             Logger.LogStartupMessage("Deserialisation folder: {0}", intermediateFilesFolder);
             var queryTypes = (QueryType[])Enum.GetValues(typeof(QueryType));
             var intermediateLookups = new Dictionary<QueryType, TagByQueryLookup>(queryTypes.Length);
-            var intermediateBitMapIndexes = new Dictionary<QueryType, TagByQueryBitMapIndex>(queryTypes.Length);
+            var intermediateBitMapIndexes = new Dictionary<QueryType, TagByQueryBitMapLookup>(queryTypes.Length);
             foreach (QueryType type in queryTypes)
             {
                 if (deserialiseBitMapsIndexes)
@@ -132,7 +134,7 @@ namespace StackOverflowTagServer
                     // Maybe don't check this in, it's just here to save time when we don't need to real data!!!
                     var tempLookup = new TagByQueryLookup();
                     intermediateLookups.Add(type, tempLookup);
-                    var tempBitMapIndexes = new TagByQueryBitMapIndex();
+                    var tempBitMapIndexes = new TagByQueryBitMapLookup();
                     intermediateBitMapIndexes.Add(type, tempBitMapIndexes);
                 }
             }
@@ -151,7 +153,7 @@ namespace StackOverflowTagServer
             return queryInfo[tag].Length;
         }
 
-        internal EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType)
+        public EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType)
         {
             var bitMapTimer = Stopwatch.StartNew();
             var tagLookupForQueryType = GetTagLookupForQueryType(queryType);
@@ -171,102 +173,40 @@ namespace StackOverflowTagServer
             // At the end we need to have the BitMap Set (i.e. 1) in places where you CAN use the question, i.e. it's NOT excluded
             // That way we can efficiently apply the exclusions by ANDing this BitMap to the previous results
 
-            var setBitsTimer = Stopwatch.StartNew();
+            var allQuestions = tagLookupForQueryType[ALL_TAGS_KEY];
             var reverseMode = excludedQuestionIds.Count < (questions.Count / 2);
 
-            var allQuestions = tagLookupForQueryType[ALL_TAGS_KEY];
+            var setBitsTimer = Stopwatch.StartNew();
             for (int index = 0; index < allQuestions.Length; index++)
             {
-                var questionId = allQuestions[index];
                 bool wasSet = true;
-                if (reverseMode && excludedQuestionIds.Contains(questionId))
-                    wasSet = bitMap.Set(index); // Set where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-                else if (reverseMode == false && excludedQuestionIds.Contains(questionId) == false)
-                    wasSet = bitMap.Set(index); // Directly set where you CAN use the question
+                var shouldExclude = excludedQuestionIds.Contains(allQuestions[index]);
+                if (reverseMode && shouldExclude)
+                    wasSet = bitMap.Set(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
+                else if (reverseMode == false && shouldExclude == false)
+                    wasSet = bitMap.Set(index); // Directly set a bit where you CAN use the question (won't do a NOT afterwards)
 
                 if (wasSet == false)
                     Logger.LogStartupMessage("Error, unable to set bit {0:N0} (SizeInBits = {1:N0})", index, bitMap.SizeInBits);
             }
-
-            //for (int index = 0; index < allQuestions.Length; index++)
-            //{
-            //    var qu = questions[index];
-            //    for (int t = 0; t < qu.Tags.Count; t++)
-            //    {
-            //        var tag = qu.Tags[t];
-            //        if (tagsToExclude.Contains(tag))
-            //        {
-            //            bitMap.Set(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-            //            break; // Stop iterating through tags, we know we can't use this question
-            //        }
-            //    }
-            //}
-            //bitMap.Not(); // in-place
-
-            // This is much slower 1,169 ms v. 340 ms (probably the sorting and creating the lookup!!!)
-            //var allQuestionLookup = allQuestions.Select((quId, index) => new { quId, index }).ToDictionary(i => i.quId, i => i.index);
-            //foreach (var item in excludedQuestionIds.Select(quId => new { quId, index = allQuestionLookup[quId] }).OrderBy(i => i.index))
-            //{
-            //    bool wasSet = bitMap.Set(item.index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-
-            //    if (wasSet == false)
-            //        Logger.LogStartupMessage("Error, unable to set bit {0:N0} (SizeInBits = {1:N0})", item.index, bitMap.SizeInBits);
-            //}
             setBitsTimer.Stop();
 
             var alternativeBitSetTimer = Stopwatch.StartNew();
             var bitArrayLength = CLR.BitHelper.ToIntArrayLength(questions.Count);
             var bitHelperArray = new int[bitArrayLength];
-            var regularBitSet = new CLR.BitHelper(bitHelperArray, bitArrayLength);
+            var bitSet = new CLR.BitHelper(bitHelperArray, bitArrayLength);
+            bitSet.SetMaxAllowedBit(questions.Count);
+
             for (int index = 0; index < allQuestions.Length; index++)
             {
-                var questionId = allQuestions[index];
-                if (reverseMode && excludedQuestionIds.Contains(questionId))
-                    regularBitSet.MarkBit(index); // Set where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-                else if (reverseMode == false && excludedQuestionIds.Contains(questionId) == false)
-                    regularBitSet.MarkBit(index); // Directly set where you CAN use the question
+                var shouldExclude = excludedQuestionIds.Contains(allQuestions[index]);
+                if (reverseMode && shouldExclude)
+                    bitSet.MarkBit(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
+                else if (reverseMode == false && shouldExclude == false)
+                    bitSet.MarkBit(index); // Directly set a bit where you CAN use the question (won't do a NOT afterwards)
             }
 
-            //for (int index = 0; index < allQuestions.Length; index++)
-            //{
-            //    var qu = questions[index];
-            //    for (int t = 0; t < qu.Tags.Count; t++)
-            //    {
-            //        var tag = qu.Tags[t];
-            //        if (tagsToExclude.Contains(tag))
-            //        {
-            //            bitSet.MarkBit(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-            //            break; // Stop iterating through tags, we know we can't use this question
-            //        }
-            //    }
-            //}
-            //bitSet.Not(); // in-place
-
-            // This is also MUCH sloower, 2,707 ms v. 378 ms (mostly down to the time taken to make the lookup!!)
-            //var allQuestionLookup = allQuestions.Select((quId, index) => new { quId, index }).ToDictionary(i => i.quId, i => i.index);
-            //foreach (var questionId in excludedQuestionIds)
-            //{
-            //    var index = allQuestionLookup[questionId];
-            //    bitSet.MarkBit(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-            //}
             alternativeBitSetTimer.Stop();
-
-            //var bitMapSizeBefore = (long)bitMap.GetCardinality();
-            //var bitSetSizeBefore = (long)bitSet.GetCardinality();
-            //var diffBefore = bitMapSizeBefore - bitSetSizeBefore;
-            //if (bitMapSizeBefore != bitSetSizeBefore) // && bitMap.GetCardinality() < 7000000)
-            //{
-            //    var bitMapPositions = bitMap.GetPositions();
-            //    var bitSetPositions = bitSet.GetPositions();
-
-            //    var inFirstButNotInSecond = new HashSet<int>(bitMapPositions).Except(bitSetPositions).ToList();
-            //    var inSecondButNotInFirst = new HashSet<int>(bitSetPositions).Except(bitMapPositions).ToList();
-            //    var tempHashSet = new HashSet<int>(bitMapPositions);
-            //    tempHashSet.IntersectWith(bitSetPositions);
-            //    var inBoth = tempHashSet.ToList();
-
-            //    var temp = 5;
-            //}
 
             var tidyUpTimer = Stopwatch.StartNew();
             bitMap.SetSizeInBits(questions.Count, defaultvalue: false);
@@ -277,28 +217,11 @@ namespace StackOverflowTagServer
             if (reverseMode)
             {
                 bitMap.Not(); // in-place
-                regularBitSet.Not(); // in-place
+                bitSet.Not(); // in-place
             }
             notTimer.Stop();
 
             bitMapTimer.Stop();
-
-            //var bitMapSizeAfter = (long)bitMap.GetCardinality();
-            //var bitSetSizeAfter = (long)bitSet.GetCardinality();
-            //var diffAfter = bitMapSizeAfter - bitSetSizeAfter;
-            //if (bitMapSizeAfter != bitSetSizeAfter)
-            //{
-            //    var bitMapPositions = bitMap.GetPositions();
-            //    var bitSetPositions = bitSet.GetPositions();
-
-            //    var inFirstButNotInSecond = new HashSet<int>(bitMapPositions).Except(bitSetPositions).ToList();
-            //    var inSecondButNotInFirst = new HashSet<int>(bitSetPositions).Except(bitMapPositions).ToList();
-            //    var tempHashSet = new HashSet<int>(bitMapPositions);
-            //    tempHashSet.IntersectWith(bitSetPositions);
-            //    var inBoth = tempHashSet.ToList();
-
-            //    var temp = 5;
-            //}
 
             Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to collect {2:N0} Question Ids from {3:N0} Tags",
                                      collectIdsTimer.Elapsed, collectIdsTimer.ElapsedMilliseconds, excludedQuestionIds.Count, tagsToExclude.Count);
@@ -306,10 +229,9 @@ namespace StackOverflowTagServer
                                      setBitsTimer.Elapsed, setBitsTimer.ElapsedMilliseconds,
                                      reverseMode ? ((ulong)questions.Count - bitMap.GetCardinality()) : bitMap.GetCardinality(),
                                      reverseMode ? "(in REVERSE mode)" : "");
-            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} ({3:N0}) bits using ALTERNATIVE mode {4}",
+            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits using ALTERNATIVE mode {3}",
                                      alternativeBitSetTimer.Elapsed, alternativeBitSetTimer.ElapsedMilliseconds,
-                                     (reverseMode ? (questions.Count - regularBitSet.GetCardinality()) : regularBitSet.GetCardinality()),
-                                     regularBitSet.GetCardinality(),
+                                     (reverseMode ? (questions.Count - bitSet.GetCardinality()) : bitSet.GetCardinality()),
                                      reverseMode ? "(in REVERSE mode)" : "");
             Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to tidy-up the Bit Map (SetSizeInBits(..) and Shrink()), Size={2:N0} bytes ({3:N2} MB)",
                                      tidyUpTimer.Elapsed, tidyUpTimer.ElapsedMilliseconds, bitMap.SizeInBytes, bitMap.SizeInBytes / 1024.0 / 1024.0);
@@ -330,98 +252,6 @@ namespace StackOverflowTagServer
             return bitMap;
         }
 
-        private static Dictionary<QueryType, Func<Question, string>> queryTypeLookup =
-            new Dictionary<QueryType, Func<Question, string>>
-                {
-                    { QueryType.AnswerCount, qu => qu.AnswerCount.HasValue ? qu.AnswerCount.Value.ToString("N0") : "<NULL>" },
-                    { QueryType.CreationDate, qu => qu.CreationDate.ToString() },
-                    { QueryType.LastActivityDate, qu => qu.LastActivityDate.ToString() },
-                    { QueryType.Score, qu => qu.Score.HasValue ? qu.Score.Value.ToString("N0") : "<NULL>" },
-                    { QueryType.ViewCount, qu => qu.ViewCount.HasValue ? qu.ViewCount.Value.ToString("N0") : "<NULL>" }
-                };
-
-        internal void TestBitMapIndexes(string tag1, string tag2, QueryType queryType, string @operator)
-        {
-            var fieldFetcher = queryTypeLookup[queryType];
-            var bitMap = GetTagBitMapIndexForQueryType(queryType);
-            var questionLookup = GetTagLookupForQueryType(queryType)[ALL_TAGS_KEY];
-
-            Logger.Log("Tag \"{0}\" is in {1:N0} Questions, Tag \"{2}\" is in {3:N0} Questions", tag1, allTags[tag1], tag2, allTags[tag2]);
-
-            //PrintResults(Enumerable.Range(0, questionLookup.Length), questionLookup, ALL_TAGS_KEY, queryType, fieldFetcher);
-            //PrintResults(bitMap[tag1], questionLookup, tag1, queryType, fieldFetcher);
-            //PrintResults(bitMap[tag2], questionLookup, tag2, queryType, fieldFetcher);
-
-            var timer = Stopwatch.StartNew();
-            var tag1BitMap = bitMap[tag1];
-            var tag2BitMap = bitMap[tag2];
-            EwahCompressedBitArray bitMapResult = new EwahCompressedBitArray();
-
-            if (@operator == "OR")
-            {
-                bitMapResult = tag1BitMap.Or(tag2BitMap);
-            }
-            else if (@operator == "OR NOT")
-            {
-                var cloneTimer = Stopwatch.StartNew();
-                var notTag2BitMap = (EwahCompressedBitArray)tag2BitMap.Clone();
-                cloneTimer.Stop();
-
-                var notTimer = Stopwatch.StartNew();
-                notTag2BitMap.Not();
-                notTimer.Stop();
-
-                var orTimer = Stopwatch.StartNew();
-                bitMapResult = tag1BitMap.Or(notTag2BitMap);
-                orTimer.Stop();
-
-                Logger.Log("CLONING took {0:N2} ms, NOT took {1:N2} ms, OR took {2:N2} ms",
-                           cloneTimer.Elapsed.TotalMilliseconds, notTimer.Elapsed.TotalMilliseconds, orTimer.Elapsed.TotalMilliseconds);
-            }
-            else if (@operator == "AND")
-            {
-                bitMapResult = tag1BitMap.And(tag2BitMap);
-            }
-            else if (@operator == "AND NOT")
-            {
-                var cloneTimer = Stopwatch.StartNew();
-                var notTag2BitMap = (EwahCompressedBitArray)tag2BitMap.Clone();
-                cloneTimer.Stop();
-
-                var notTimer = Stopwatch.StartNew();
-                notTag2BitMap.Not();
-                notTimer.Stop();
-
-                var andTimer = Stopwatch.StartNew();
-                bitMapResult = tag1BitMap.And(notTag2BitMap);
-                andTimer.Stop();
-
-                Logger.Log("CLONING took {0:N2} ms, NOT took {1:N2} ms, AND took {2:N2} ms",
-                           cloneTimer.Elapsed.TotalMilliseconds, notTimer.Elapsed.TotalMilliseconds, andTimer.Elapsed.TotalMilliseconds);
-            }
-
-            timer.Stop();
-
-            using (Utils.SetConsoleColour(ConsoleColor.DarkYellow))
-            {
-                Logger.Log("Took {0,5:N2} ms to calculate \"{1} {2} {3}\"", timer.Elapsed.TotalMilliseconds, tag1, @operator, tag2);
-            }
-            //PrintResults(bitMapResult, questionLookup, string.Format("{0} {1} {2)", tag1, @operator, tag2), queryType, fieldFetcher);
-            Logger.Log();
-        }
-
-        private void PrintResults(IEnumerable<int> bits, int[] questionLookup, string info, QueryType queryType, Func<Question, string> fieldFetcher)
-        {
-            Logger.Log("RESULTS for \"{0}\":", info);
-            foreach (var bit in bits.Take(10))
-            {
-                var questionId = questionLookup[bit];
-                var question = questions[questionId];
-                Logger.Log("  Bit=[{0,9:N0}] -> Qu=[{1,9:N0}], {2}={3,10:N0}, Tags= {4}",
-                           bit, questionId, queryType, fieldFetcher(question), String.Join(", ", question.Tags));
-            }
-        }
-
         /// <summary>
         /// Private constructor that is used when creating the Tag Server from SCRATCH (<see cref="CreateFromScratchAndSaveToDisk"/>)
         /// </summary>
@@ -431,6 +261,9 @@ namespace StackOverflowTagServer
             questions = questionsList;
             queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
             complexQueryProcessor = new ComplexQueryProcessor(questions, type => GetTagLookupForQueryType(type));
+            bitMapQueryProcessor = new BitMapQueryProcessor(questions, allTags,
+                                                            type => GetTagLookupForQueryType(type),
+                                                            type => GetTagBitMapIndexForQueryType(type));
 
             var groupedTags = CreateTagGroupings();
             allTags = groupedTags.ToDictionary(t => t.Key, t => t.Value.Count);
@@ -443,11 +276,11 @@ namespace StackOverflowTagServer
             tagsByViewCount = new TagByQueryLookup(groupedTags.Count);
 
             // These have to be initialised in the ctor, so they can remain readonly
-            tagsByAnswerCountBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
-            tagsByCreationDateBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
-            tagsByLastActivityDateBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
-            tagsByScoreBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
-            tagsByViewCountBitMapIndex = new TagByQueryBitMapIndex(groupedTags.Count);
+            tagsByAnswerCountBitMapIndex = new TagByQueryBitMapLookup(groupedTags.Count);
+            tagsByCreationDateBitMapIndex = new TagByQueryBitMapLookup(groupedTags.Count);
+            tagsByLastActivityDateBitMapIndex = new TagByQueryBitMapLookup(groupedTags.Count);
+            tagsByScoreBitMapIndex = new TagByQueryBitMapLookup(groupedTags.Count);
+            tagsByViewCountBitMapIndex = new TagByQueryBitMapLookup(groupedTags.Count);
 
             CreateSortedLists(groupedTags, useAlternativeMethod: true);
 
@@ -468,11 +301,14 @@ namespace StackOverflowTagServer
         /// </summary>
         private TagServer(List<Question> questionsList, TagLookup allTags,
                           Dictionary<QueryType, TagByQueryLookup> intermediateLookups,
-                          Dictionary<QueryType, TagByQueryBitMapIndex> intermediateBitMapIndexes)
+                          Dictionary<QueryType, TagByQueryBitMapLookup> intermediateBitMapIndexes)
         {
             questions = questionsList;
             queryProcessor = new QueryProcessor(questions, type => GetTagLookupForQueryType(type));
             complexQueryProcessor = new ComplexQueryProcessor(questions, type => GetTagLookupForQueryType(type));
+            bitMapQueryProcessor = new BitMapQueryProcessor(questions, allTags,
+                                                            type => GetTagLookupForQueryType(type),
+                                                            type => GetTagBitMapIndexForQueryType(type));
             this.allTags = allTags;
 
             // These have to be initialised in the ctor, so they can remain readonly
@@ -498,7 +334,7 @@ namespace StackOverflowTagServer
             Logger.LogStartupMessage("After TagServer created - Using {0:N2} MB ({1:N2} GB) of memory in total\n", mbUsed, mbUsed / 1024.0);
         }
 
-        #region QueryApiPassedThruToQueryProcessor
+#region QueryApiPassedThruToQueryProcessor
 
         public List<Question> Query(QueryType type, string tag, int pageSize = 50, int skip = 0 /*, bool ascending = true*/)
         {
@@ -515,22 +351,27 @@ namespace StackOverflowTagServer
             return complexQueryProcessor.QueryNoLINQ(info, tagsToExclude);
         }
 
-        public List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
+        public QueryResult ComparisionQueryBitMapIndex(QueryInfo info, EwahCompressedBitArray exclusionBitMap = null)
+        {
+            return bitMapQueryProcessor.Query(info, exclusionBitMap);
+        }
+
+        internal List<Question> BooleanQueryWithExclusionsLINQVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
         {
             return queryProcessor.BooleanQueryWithExclusionsLINQVersion(type, tag, excludedTags, pageSize, skip);
         }
 
-        public List<Question> BooleanQueryWithExclusionsFastVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
+        internal List<Question> BooleanQueryWithExclusionsFastVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
         {
             return queryProcessor.BooleanQueryWithExclusionsFastVersion(type, tag, excludedTags, pageSize, skip);
         }
 
-        public List<Question> BooleanQueryWithExclusionsFastAlternativeVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
+        internal List<Question> BooleanQueryWithExclusionsFastAlternativeVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
         {
             return queryProcessor.BooleanQueryWithExclusionsFastAlternativeVersion(type, tag, excludedTags, pageSize, skip);
         }
 
-        public List<Question> BooleanQueryWithExclusionsBloomFilterVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
+        internal List<Question> BooleanQueryWithExclusionsBloomFilterVersion(QueryType type, string tag, IList<string> excludedTags, int pageSize = 50, int skip = 0)
         {
             return queryProcessor.BooleanQueryWithExclusionsBloomFilterVersion(type, tag, excludedTags, pageSize, skip);
         }
@@ -556,7 +397,7 @@ namespace StackOverflowTagServer
             }
         }
 
-        private TagByQueryBitMapIndex GetTagBitMapIndexForQueryType(QueryType type)
+        private TagByQueryBitMapLookup GetTagBitMapIndexForQueryType(QueryType type)
         {
             switch (type)
             {
