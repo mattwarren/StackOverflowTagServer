@@ -120,7 +120,6 @@
     <Compile Include="Querying\QueryProcessor.cs" />
     <Compile Include="DataStructures\QueryType.cs" />
     <Compile Include="DataStructures\SimpleBloomFilter.cs" />
-    <Compile Include="DataStructures\TagInfo.cs" />
     <Compile Include="Querying\QueryResult.cs" />
     <Compile Include="Results.cs" />
     <Compile Include="Serialisation.cs" />
