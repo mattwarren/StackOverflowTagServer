@@ -82,9 +82,6 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="EWAH">
-      <HintPath>..\EWAH (Compressed BitMap Index)\EWAH.dll</HintPath>
-    </Reference>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="protobuf-net">
       <HintPath>..\packages\protobuf-net.2.0.0.668\lib\net40\protobuf-net.dll</HintPath>
@@ -97,6 +94,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BitMapIndexHandler.cs" />
+    <Compile Include="EWAH\BufferedRunningLengthWord.cs" />
+    <Compile Include="EWAH\EwahCompressedBitArray.cs" />
+    <Compile Include="EWAH\EwahCompressedBitArraySerializer.cs" />
+    <Compile Include="EWAH\EwahEnumerator.cs" />
+    <Compile Include="EWAH\RunningLengthWord.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Querying\BaseQueryProcessor.cs" />
     <Compile Include="CLR\BitHelper.cs" />
