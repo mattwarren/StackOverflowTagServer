@@ -558,7 +558,7 @@ namespace Ewah
                         prey.DiscardFirstWords(tobediscarded);
                     }
                 }
-                // all that is left to do now is to AND the dirty words
+                // all that is left to do now is to AND NOT the dirty words
                 nbreDirtyPrey = prey.NumberOfLiteralWords;
                 if (nbreDirtyPrey > 0)
                 {
@@ -804,7 +804,6 @@ namespace Ewah
         /// </summary>
         public void Not()
         {
-
             var i = new EwahEnumerator(_Buffer, _ActualSizeInWords);
             if (!i.HasNext())
             {
@@ -812,19 +811,16 @@ namespace Ewah
             }
             while (true)
             {
-
                 RunningLengthWord rlw1 = i.Next();
-
                 rlw1.RunningBit = !rlw1.RunningBit;
                 for (int j = 0; j < rlw1.NumberOfLiteralWords; ++j)
                 {
                     i.Buffer[i.DirtyWords + j] = ~i.Buffer[i.DirtyWords + j];
                 }
+
                 if (!i.HasNext())
                 {
-
                     int usedbitsinlast = SizeInBits % WordInBits;
-
                     if (usedbitsinlast == 0)
                         return;
 
@@ -837,12 +833,10 @@ namespace Ewah
                         }
                         return;
                     }
-                    i.Buffer[i.DirtyWords + rlw1.NumberOfLiteralWords - 1] &= (long)((~0UL) >>
-                                                                               (WordInBits - usedbitsinlast));
+                    i.Buffer[i.DirtyWords + rlw1.NumberOfLiteralWords - 1] &= (long)((~0UL) >> (WordInBits - usedbitsinlast));
 
                     return;
                 }
-
             }
         }
 
@@ -883,8 +877,7 @@ namespace Ewah
                     predatorrl = predator.RunningLength;
                     long preyrl = prey.RunningLength;
                     tobediscarded = (predatorrl >= preyrl) ? preyrl : predatorrl;
-                    container
-                        .AddStreamOfEmptyWords(predator.RunningBit, tobediscarded);
+                    container.AddStreamOfEmptyWords(predator.RunningBit, tobediscarded);
                     long dwPredator = predator.DirtyWordOffset
                                       + (iIsPrey ? j.DirtyWords : i.DirtyWords);
                     container.AddStreamOfDirtyWords(iIsPrey ? j.Buffer : i.Buffer,
@@ -943,8 +936,7 @@ namespace Ewah
                         }
                         else
                         {
-                            container.Add(i.Buffer[predator.DirtyWordOffset + i.DirtyWords
-                                                   + k]
+                            container.Add(i.Buffer[predator.DirtyWordOffset + i.DirtyWords + k]
                                           | j.Buffer[prey.DirtyWordOffset + j.DirtyWords + k]);
                         }
                     }
@@ -957,8 +949,7 @@ namespace Ewah
                         rlwi = null;
                         break;
                     }
-                    rlwi.Reset(i.Next()); // = new
-                    // BufferedRunningLengthWord(i.Next());
+                    rlwi.Reset(i.Next());
                 }
                 else
                 {
@@ -967,9 +958,7 @@ namespace Ewah
                         rlwj = null;
                         break;
                     }
-                    rlwj.Reset(j.Next()); // = new
-                    // BufferedRunningLengthWord(
-                    // j.Next());
+                    rlwj.Reset(j.Next());
                 }
             }
             if (rlwi != null)
@@ -981,6 +970,172 @@ namespace Ewah
                 Discharge(rlwj, j, container);
             }
             container.SizeInBits = Math.Max(SizeInBits, a.SizeInBits);
+            return container;
+        }
+
+        /// <summary>
+        /// Returns a new compressed bitmap containing the bitwise OR NOT values of the
+        /// current bitmap with some other bitmap.
+        ///
+        /// The running time is proportional to the sum of the compressed sizes (as
+        /// reported by <ref>SizeInBytes</ref>).
+        /// </summary>
+        /// <param name="a">the other bitmap</param>
+        /// <returns>the EWAH compressed bitmap</returns>
+        public EwahCompressedBitArray OrNot(EwahCompressedBitArray a)
+        {
+            var container = new EwahCompressedBitArray();
+            container.Reserve(_ActualSizeInWords + a._ActualSizeInWords);
+            EwahEnumerator i = a.GetEwahEnumerator();
+            EwahEnumerator j = GetEwahEnumerator();
+            if (!(i.HasNext() && j.HasNext()))
+            {
+                // this never happens...
+                container.SizeInBits = SizeInBits;
+                return container;
+            }
+            // at this point, this is safe:
+            var rlwi = new BufferedRunningLengthWord(i.Next());
+            rlwi.RunningBit = !rlwi.RunningBit;
+            var rlwj = new BufferedRunningLengthWord(j.Next());
+            // RunningLength;
+            while (true)
+            {
+                bool iIsPrey = rlwi.Count < rlwj.Count;
+                BufferedRunningLengthWord prey = iIsPrey ? rlwi : rlwj;
+                BufferedRunningLengthWord predator = iIsPrey ? rlwj : rlwi;
+                long predatorrl;
+                long tobediscarded;
+                if (prey.RunningBit == false)
+                {
+                    predatorrl = predator.RunningLength;
+                    long preyrl = prey.RunningLength;
+                    tobediscarded = (predatorrl >= preyrl) ? preyrl : predatorrl;
+                    container.AddStreamOfEmptyWords(predator.RunningBit, tobediscarded);
+                    long dwPredator = predator.DirtyWordOffset
+                                      + (iIsPrey ? j.DirtyWords : i.DirtyWords);
+                    if (iIsPrey)
+                    {
+                        container.AddStreamOfDirtyWords(j.Buffer,
+                                                        dwPredator,
+                                                        preyrl - tobediscarded);
+                    }
+                    else
+                    {
+                        container.AddStreamOfNegatedDirtyWords(i.Buffer,
+                                                               dwPredator,
+                                                               preyrl - tobediscarded);
+                    }
+                    predator.DiscardFirstWords(preyrl);
+                    prey.DiscardFirstWords(preyrl);
+                    prey.RunningLength = 0;
+                }
+                else
+                {
+                    // we have a stream of 1x11
+                    container.AddStreamOfEmptyWords(true, prey.RunningLength);
+                    predator.DiscardFirstWords(prey.RunningLength);
+                    prey.RunningLength = 0;
+                }
+                predatorrl = predator.RunningLength;
+                long nbreDirtyPrey;
+                if (predatorrl > 0)
+                {
+                    if (predator.RunningBit == false)
+                    {
+                        nbreDirtyPrey = prey.NumberOfLiteralWords;
+                        tobediscarded = (predatorrl >= nbreDirtyPrey)
+                                            ? nbreDirtyPrey
+                                            : predatorrl;
+                        long dwPrey = prey.DirtyWordOffset
+                                      + (iIsPrey ? i.DirtyWords : j.DirtyWords);
+                        predator.DiscardFirstWords(tobediscarded);
+                        prey.DiscardFirstWords(tobediscarded);
+                        if (iIsPrey)
+                        {
+                            container.AddStreamOfNegatedDirtyWords(i.Buffer,
+                                                                   dwPrey,
+                                                                   tobediscarded);
+                        }
+                        else
+                        {
+                            container.AddStreamOfDirtyWords(j.Buffer, dwPrey, tobediscarded);
+                        }
+                    }
+                    else
+                    {
+                        nbreDirtyPrey = prey.NumberOfLiteralWords;
+                        tobediscarded = (predatorrl >= nbreDirtyPrey)
+                                            ? nbreDirtyPrey
+                                            : predatorrl;
+                        container.AddStreamOfEmptyWords(true, tobediscarded);
+                        predator.DiscardFirstWords(tobediscarded);
+                        prey.DiscardFirstWords(tobediscarded);
+                    }
+                }
+                // all that is left to do now is to OR NOT the dirty words
+                nbreDirtyPrey = prey.NumberOfLiteralWords;
+                if (nbreDirtyPrey > 0)
+                {
+                    for (int k = 0; k < nbreDirtyPrey; ++k)
+                    {
+                        if (iIsPrey)
+                        {
+                            container.Add((~i.Buffer[prey.DirtyWordOffset + i.DirtyWords + k])
+                                          | j.Buffer[predator.DirtyWordOffset + j.DirtyWords + k]);
+                        }
+                        else
+                        {
+                            container.Add((~i.Buffer[predator.DirtyWordOffset + i.DirtyWords + k])
+                                          | j.Buffer[prey.DirtyWordOffset + j.DirtyWords + k]);
+                        }
+                    }
+                    predator.DiscardFirstWords(nbreDirtyPrey);
+                }
+                if (iIsPrey)
+                {
+                    if (!i.HasNext())
+                    {
+                        rlwi = null;
+                        break;
+                    }
+                    rlwi.Reset(i.Next());
+                    rlwi.RunningBit = !rlwi.RunningBit;
+                }
+                else
+                {
+                    if (!j.HasNext())
+                    {
+                        rlwj = null;
+                        break;
+                    }
+                    rlwj.Reset(j.Next());
+                }
+            } // end of main while(true) loop
+            if (rlwi != null)
+            {
+                DischargeAsEmpty(rlwi, i, container);
+            }
+            if (rlwj != null)
+            {
+                DischargeAsEmpty(rlwj, j, container);
+            }
+            container.SizeInBits = Math.Max(SizeInBits, a.SizeInBits);
+
+            // Now "fix" the last word, to take account of empty bits
+            int usedbitsinlast = SizeInBits % WordInBits;
+            if (usedbitsinlast == 0)
+                return container;
+
+            if (container._Rlw.NumberOfLiteralWords == 0)
+            {
+                if ((container._Rlw.RunningLength > 0) && (container._Rlw.RunningBit))
+                {
+                    container._Rlw.RunningLength = container._Rlw.RunningLength - 1;
+                    container.AddLiteralWord((long)((~0UL) >> (WordInBits - usedbitsinlast)));
+                }
+            }
+
             return container;
         }
 
@@ -1099,8 +1254,9 @@ namespace Ewah
         /// <returns>detailed debug string</returns>
         public string ToDebugString()
         {
-            string ans = " EwahCompressedBitArray, size in bits = " + SizeInBits
-                         + " size in words = " + _ActualSizeInWords + "\n";
+            string ans = string.Format(
+                "EwahCompressedBitArray, size in bits = {0}, size in words = {1}, compressed size in bytes = {2} (uncompressed = {3} bytes), cardinality = {4}\n",
+                SizeInBits, _ActualSizeInWords, SizeInBytes, SizeInBits / 8.0, GetCardinality());
             var i = new EwahEnumerator(_Buffer, _ActualSizeInWords);
             while (i.HasNext())
             {
@@ -1117,7 +1273,9 @@ namespace Ewah
                 for (int j = 0; j < localrlw.NumberOfLiteralWords; ++j)
                 {
                     long data = i.Buffer[i.DirtyWords + j];
-                    ans += "\t" + data + "\n";
+                    // -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
+                    ans += String.Format("\t[{0,4}]= {1,20}, {2,2} bits set -> {{{3}}} \n",
+                                        j, data, bitCount((ulong)data), Convert.ToString(data, 2).PadLeft(sizeof(long) * 8, '0'));
                 }
             }
             return ans;

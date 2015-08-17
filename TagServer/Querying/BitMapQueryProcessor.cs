@@ -66,21 +66,7 @@ namespace StackOverflowTagServer.Querying
                     bitMapResult = tag1BitMap.Or(tag2BitMap);
                     break;
                 case "OR-NOT": //"i.e. .net+or+jquery-"
-                    // TODO see if it's possible to write a custom OrNot() function (could use AndNot() as a starting point?)
-                    var cloneTimer = Stopwatch.StartNew();
-                    var notTag2BitMap = (EwahCompressedBitArray)tag2BitMap.Clone();
-                    cloneTimer.Stop();
-
-                    var notTimer = Stopwatch.StartNew();
-                    notTag2BitMap.Not();
-                    notTimer.Stop();
-
-                    var orTimer = Stopwatch.StartNew();
-                    bitMapResult = tag1BitMap.Or(notTag2BitMap);
-                    orTimer.Stop();
-
-                    Logger.Log("CLONING took {0:N2} ms, NOT took {1:N2} ms, OR took {2:N2} ms",
-                               cloneTimer.Elapsed.TotalMilliseconds, notTimer.Elapsed.TotalMilliseconds, orTimer.Elapsed.TotalMilliseconds);
+                    bitMapResult = tag1BitMap.OrNot(tag2BitMap);
                     break;
 
                 // TODO Work out what a "NOT" query really means, the LINQ version was "result = tag1Query.Except(tag2Query)" (which is the same as AND-NOT?!)
