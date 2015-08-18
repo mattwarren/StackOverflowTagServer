@@ -269,7 +269,7 @@ namespace StackOverflowTagServer
 
         public QueryResult ComparisionQueryBitMapIndex(QueryInfo info, EwahCompressedBitArray exclusionBitMap = null, bool printLoggingMessages = false)
         {
-            return bitMapQueryProcessor.Query(info, exclusionBitMap);
+            return bitMapQueryProcessor.Query(info, exclusionBitMap, printLoggingMessages);
         }
 
         public EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType, bool printLoggingMessages = false)
