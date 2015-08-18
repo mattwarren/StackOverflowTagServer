@@ -1188,6 +1188,53 @@ namespace Ewah
             return true;
         }
 
+        public bool SetOptimised(int i)
+        {
+            if (i < SizeInBits)
+            {
+                return false;
+            }
+            // must I complete a word?
+            if ((SizeInBits % WordInBits) != 0)
+            {
+                int possiblesizeinbits = (SizeInBits / WordInBits) * WordInBits + WordInBits;
+                if (possiblesizeinbits < i + 1)
+                {
+                    SizeInBits = possiblesizeinbits;
+                }
+            }
+            var number = (i / WordInBits) - SizeInBits / WordInBits;
+            if (number != 0)
+                AddStreamOfEmptyWords(false, number);
+            int bittoflip = i - (SizeInBits / WordInBits * WordInBits);
+            // next, we set the bit
+            if ((_Rlw.HaveAddedALiteralWord == false)
+                || ((SizeInBits - 1) / WordInBits < i / WordInBits))
+            {
+                long newdata = 1L << bittoflip;
+                AddLiteralWord(newdata);
+                _Rlw.HaveAddedALiteralWord = true;
+            }
+            else
+            {
+                _Buffer[_ActualSizeInWords - 1] |= 1L << bittoflip;
+                // check if we just completed a stream of 1s
+                if (_Buffer[_ActualSizeInWords - 1] == ~0L)
+                {
+                    // we remove the last dirty word
+                    _Buffer[_ActualSizeInWords - 1] = 0L;
+                    --_ActualSizeInWords;
+                    _Rlw.NumberOfLiteralWords = _Rlw.NumberOfLiteralWords - 1;
+                    if (_Rlw.NumberOfLiteralWords == 0)
+                        _Rlw.HaveAddedALiteralWord = false;
+                    // next we add one clean word
+                    AddEmptyWord(true);
+                }
+            }
+            SizeInBits = i + 1;
+            return true;
+        }
+
         /// <summary>
         /// Change the reported size in bits of the *uncompressed* bitmap represented
         /// by this compressed bitmap. It is not possible to reduce the SizeInBits, but
@@ -1252,10 +1299,11 @@ namespace Ewah
         /// A more detailed string describing the bitmap (useful for debugging).
         /// </summary>
         /// <returns>detailed debug string</returns>
-        public string ToDebugString()
+        public string ToDebugString(bool printEveryLiteralWord = true)
         {
-            string ans = string.Format(
-                "EwahCompressedBitArray, size in bits = {0}, size in words = {1}, compressed size in bytes = {2} (uncompressed = {3} bytes), cardinality = {4}\n",
+            StringBuilder ans = new StringBuilder();
+            ans.AppendFormat(
+                "EwahCompressedBitArray, size in bits = {0:N0}, size in words = {1:N0}, compressed size in bytes = {2:N0} (uncompressed = {3:N0} bytes), cardinality = {4:N0}\n",
                 SizeInBits, _ActualSizeInWords, SizeInBytes, SizeInBits / 8.0, GetCardinality());
             var i = new EwahEnumerator(_Buffer, _ActualSizeInWords);
             while (i.HasNext())
@@ -1263,22 +1311,25 @@ namespace Ewah
                 RunningLengthWord localrlw = i.Next();
                 if (localrlw.RunningBit)
                 {
-                    ans += localrlw.RunningLength + " 1x11\n";
+                    ans.Append(localrlw.RunningLength + " 1x11\n");
                 }
                 else
                 {
-                    ans += localrlw.RunningLength + " 0x00\n";
+                    ans.Append(localrlw.RunningLength + " 0x00\n");
                 }
-                ans += localrlw.NumberOfLiteralWords + " dirties\n";
+                ans.AppendFormat("{0:N0} dirties\n", localrlw.NumberOfLiteralWords);
                 for (int j = 0; j < localrlw.NumberOfLiteralWords; ++j)
                 {
                     long data = i.Buffer[i.DirtyWords + j];
-                    // -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
-                    ans += String.Format("\t[{0,4}]= {1,20}, {2,2} bits set -> {{{3}}} \n",
-                                        j, data, bitCount((ulong)data), Convert.ToString(data, 2).PadLeft(sizeof(long) * 8, '0'));
+                    // –9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
+                    if (printEveryLiteralWord)
+                    {
+                        ans.AppendFormat("\t[{0,4}]= {1,20}, {2,2} bits set -> {{{3}}} \n",
+                                         j, data, bitCount((ulong)data), Convert.ToString(data, 2).PadLeft(sizeof(long) * 8, '0'));
+                    }
                 }
             }
-            return ans;
+            return ans.ToString();
         }
 
         /// <summary>

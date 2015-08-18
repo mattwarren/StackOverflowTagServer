@@ -94,6 +94,8 @@ namespace Ewah
             }
         }
 
+        public bool HaveAddedALiteralWord;
+
         /// <summary>
         /// the running bit
         /// </summary>
