@@ -36,7 +36,7 @@ namespace StackOverflowTagServer
             cache = new ThreadLocal<HashSetCache<int>>(() => new HashSetCache<int>(initialSize: questions.Count, comparer: new IntComparer()));
         }
 
-        internal EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType)
+        internal EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType, bool printLoggingMessages = false)
         {
             var bitMapTimer = Stopwatch.StartNew();
             var tagLookupForQueryType = GetTagByQueryLookup(queryType);
@@ -76,9 +76,9 @@ namespace StackOverflowTagServer
             setBitsTimer.Stop();
 
             var alternativeBitSetTimer = Stopwatch.StartNew();
-            var bitArrayLength = CLR.BitHelper.ToIntArrayLength(questions.Count);
+            var bitArrayLength = BitHelper.ToIntArrayLength(questions.Count);
             var bitHelperArray = new int[bitArrayLength];
-            var bitSet = new CLR.BitHelper(bitHelperArray, bitArrayLength);
+            var bitSet = new BitHelper(bitHelperArray, bitArrayLength);
             bitSet.SetMaxAllowedBit(questions.Count);
 
             for (int index = 0; index < allQuestions.Length; index++)
@@ -107,30 +107,33 @@ namespace StackOverflowTagServer
 
             bitMapTimer.Stop();
 
-            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to collect {2:N0} Question Ids from {3:N0} Tags",
-                                     collectIdsTimer.Elapsed, collectIdsTimer.ElapsedMilliseconds, excludedQuestionIds.Count, tagsToExclude.Count);
-            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits {3}",
-                                     setBitsTimer.Elapsed, setBitsTimer.ElapsedMilliseconds,
-                                     reverseMode ? ((ulong)questions.Count - bitMap.GetCardinality()) : bitMap.GetCardinality(),
-                                     reverseMode ? "(in REVERSE mode)" : "");
-            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits using ALTERNATIVE mode {3}",
-                                     alternativeBitSetTimer.Elapsed, alternativeBitSetTimer.ElapsedMilliseconds,
-                                     (reverseMode ? (questions.Count - bitSet.GetCardinality()) : bitSet.GetCardinality()),
-                                     reverseMode ? "(in REVERSE mode)" : "");
-            Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to tidy-up the Bit Map (SetSizeInBits(..) and Shrink()), Size={2:N0} bytes ({3:N2} MB)",
-                                     tidyUpTimer.Elapsed, tidyUpTimer.ElapsedMilliseconds, bitMap.SizeInBytes, bitMap.SizeInBytes / 1024.0 / 1024.0);
-            if (reverseMode)
-                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to do a NOT on the BitMap", notTimer.Elapsed, notTimer.ElapsedMilliseconds);
-
-            using (Utils.SetConsoleColour(ConsoleColor.DarkYellow))
+            if (printLoggingMessages)
             {
-                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to create BitMap from {2:N0} Tags ({3:N0} Qu Ids), Cardinality={4:N0} ({5:N0}) {6}\n",
-                                         bitMapTimer.Elapsed, bitMapTimer.ElapsedMilliseconds,
-                                         tagsToExclude.Count,
-                                         excludedQuestionIds.Count,
-                                         bitMap.GetCardinality(),
-                                         (ulong)questions.Count - bitMap.GetCardinality(),
-                                         reverseMode ? "REVERSE mode" : "");
+                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to collect {2:N0} Question Ids from {3:N0} Tags",
+                                         collectIdsTimer.Elapsed, collectIdsTimer.ElapsedMilliseconds, excludedQuestionIds.Count, tagsToExclude.Count);
+                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits {3}",
+                                         setBitsTimer.Elapsed, setBitsTimer.ElapsedMilliseconds,
+                                         reverseMode ? ((ulong)questions.Count - bitMap.GetCardinality()) : bitMap.GetCardinality(),
+                                         reverseMode ? "(in REVERSE mode)" : "");
+                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits using ALTERNATIVE mode {3}",
+                                         alternativeBitSetTimer.Elapsed, alternativeBitSetTimer.ElapsedMilliseconds,
+                                         (reverseMode ? (questions.Count - bitSet.GetCardinality()) : bitSet.GetCardinality()),
+                                         reverseMode ? "(in REVERSE mode)" : "");
+                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to tidy-up the Bit Map (SetSizeInBits(..) and Shrink()), Size={2:N0} bytes ({3:N2} MB)",
+                                         tidyUpTimer.Elapsed, tidyUpTimer.ElapsedMilliseconds, bitMap.SizeInBytes, bitMap.SizeInBytes / 1024.0 / 1024.0);
+                if (reverseMode)
+                    Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to do a NOT on the BitMap", notTimer.Elapsed, notTimer.ElapsedMilliseconds);
+
+                using (Utils.SetConsoleColour(ConsoleColor.DarkYellow))
+                {
+                    Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to create BitMap from {2:N0} Tags ({3:N0} Qu Ids), Cardinality={4:N0} ({5:N0}) {6}\n",
+                                             bitMapTimer.Elapsed, bitMapTimer.ElapsedMilliseconds,
+                                             tagsToExclude.Count,
+                                             excludedQuestionIds.Count,
+                                             bitMap.GetCardinality(),
+                                             (ulong)questions.Count - bitMap.GetCardinality(),
+                                             reverseMode ? "REVERSE mode" : "");
+                }
             }
 
             return bitMap;

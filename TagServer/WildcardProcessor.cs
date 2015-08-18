@@ -237,7 +237,7 @@ namespace StackOverflowTagServer
             return expandedTags;
         }
 
-        public static HashSet ExpandTagsNGrams(TagLookup allTags, List<string> tagsToExpand, NGrams nGrams)
+        public static HashSet ExpandTagsNGrams(TagLookup allTags, List<string> tagsToExpand, NGrams nGrams, bool printLoggingMessages = false)
         {
             // Query: /Google.*Search/, we can build a query of ANDs and ORs that gives the trigrams that must be present in any text matching the regular expression.
             // In this case, the query is
@@ -265,10 +265,15 @@ namespace StackOverflowTagServer
                 var searches = CreateSearches(tagPattern);
                 var tagAdded = CollectPossibleNGramMatches(allTagsList, nGrams, searches, tagPattern, expandedTags, results);
             }
-            Logger.Log("{0:N0} wildcards, {1:N0} searches processed, {2:N0} tag Ids collected, \n" +
-                       "{3:N0} possible matches, {4:N0} IsActualMatch checks, {5:N0} tags added, {6:N0} false positives",
-                       results.ActualWildcards, results.SearchesProcessed, results.TagIdsCollected, results.PossibleMatches,
-                       results.ActualMatchChecks, results.TagsAdded, results.FalsePositives);
+
+            if (printLoggingMessages)
+            {
+                Logger.Log("{0:N0} wildcards, {1:N0} searches processed, {2:N0} tag Ids collected, \n" +
+                           "{3:N0} possible matches, {4:N0} IsActualMatch checks, {5:N0} tags added, {6:N0} false positives",
+                           results.ActualWildcards, results.SearchesProcessed, results.TagIdsCollected, results.PossibleMatches,
+                           results.ActualMatchChecks, results.TagsAdded, results.FalsePositives);
+            }
+
             return expandedTags;
         }
 

@@ -267,14 +267,14 @@ namespace StackOverflowTagServer
             return complexQueryProcessor.QueryNoLINQ(info, tagsToExclude);
         }
 
-        public QueryResult ComparisionQueryBitMapIndex(QueryInfo info, EwahCompressedBitArray exclusionBitMap = null)
+        public QueryResult ComparisionQueryBitMapIndex(QueryInfo info, EwahCompressedBitArray exclusionBitMap = null, bool printLoggingMessages = false)
         {
             return bitMapQueryProcessor.Query(info, exclusionBitMap);
         }
 
-        public EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType)
+        public EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType, bool printLoggingMessages = false)
         {
-            return bitMapIndexHandler.CreateBitMapIndexForExcludedTags(tagsToExclude, queryType);
+            return bitMapIndexHandler.CreateBitMapIndexForExcludedTags(tagsToExclude, queryType, printLoggingMessages);
         }
 
         public List<Question> GetInvalidResults(List<Question> results, QueryInfo queryInfo)

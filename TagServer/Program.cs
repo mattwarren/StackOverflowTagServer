@@ -53,7 +53,7 @@ namespace StackOverflowTagServer
             //var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, new List<string>(new[] { "*c#*" }), nGrams);
 
             var queryTypeToTest = QueryType.AnswerCount;
-            var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, queryTypeToTest);
+            var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, queryTypeToTest, printLoggingMessages: true);
 
             tagServer.ValidateExclusionBitMap(bitMapIndex, expandedTagsNGrams, queryTypeToTest);
 
@@ -76,7 +76,7 @@ namespace StackOverflowTagServer
 
             //RunExclusionQueryTests(tagServer, leppieExpandedTags, runsPerLoop: 10);
 
-            //RunSimpleQueries();
+            //RunSimpleQueries(tagServer);
 
             //Logger.LogStartupMessage("Finished, press <ENTER> to exit");
             //Console.ReadLine();
@@ -124,7 +124,7 @@ namespace StackOverflowTagServer
             expandTagsTrieTimer.Stop();
 
             var expandedTagsNGramsTimer = Stopwatch.StartNew();
-            var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(allTags, tagsToExpand, nGrams);
+            var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(allTags, tagsToExpand, nGrams, printLoggingMessages: true);
             expandTagsRegexTimer.Stop();
 
             Logger.LogStartupMessage("\nThere are {0:N0} tags in total", allTags.Count);
@@ -174,7 +174,7 @@ namespace StackOverflowTagServer
                 // special case!!
                 using (Utils.SetConsoleColour(ConsoleColor.Green))
                     Logger.Log("\nTestWildcards: special case, using ALL Tags", String.Join(", ", tagsToExpand));
-                var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(new CLR.HashSet<string>(tagServer.AllTags.Keys), QueryType.AnswerCount);
+                var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(new CLR.HashSet<string>(tagServer.AllTags.Keys), QueryType.AnswerCount, printLoggingMessages: true);
                 return;
             }
 
@@ -182,7 +182,7 @@ namespace StackOverflowTagServer
                 Logger.Log("\nTestWildcards: {0}\n", String.Join(", ", tagsToExpand.Where(t => t.Contains('*'))));
 
             var timer = Stopwatch.StartNew();
-            var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, tagsToExpand, nGrams);
+            var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, tagsToExpand, nGrams, printLoggingMessages: true);
             timer.Stop();
             using (Utils.SetConsoleColour(ConsoleColor.DarkYellow))
             {
@@ -219,11 +219,11 @@ namespace StackOverflowTagServer
             Logger.LogStartupMessage("\nIn NGrams but not in Contains: " + string.Join(", ", expandedTagsNGrams.Except(expandTagsContains)));
             Logger.LogStartupMessage();
 
-            var bitMapIndexAnswerCount = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.AnswerCount);
-            //var bitMapIndexCreationDate = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.CreationDate);
-            //var bitMapIndexLastActivityDate = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.LastActivityDate);
-            //var bitMapIndexScore = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.Score);
-            //var bitMapIndexViewCount = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.ViewCount);
+            var bitMapIndexAnswerCount = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.AnswerCount, printLoggingMessages: true);
+            //var bitMapIndexCreationDate = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.CreationDate, printLoggingMessages: true);
+            //var bitMapIndexLastActivityDate = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.LastActivityDate, printLoggingMessages: true);
+            //var bitMapIndexScore = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.Score, printLoggingMessages: true);
+            //var bitMapIndexViewCount = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, QueryType.ViewCount, printLoggingMessages: true);
         }
 
         private static void TestBitMapIndexQueries(TagServer tagServer, CLR.HashSet<string> tagsToExclude, EwahCompressedBitArray exclusionBitMapIndex, QueryType queryTypeToTest)
@@ -267,7 +267,7 @@ namespace StackOverflowTagServer
                                                               CLR.HashSet<string> tagsToExclude = null,
                                                               EwahCompressedBitArray exclusionBitMap = null)
         {
-            var result = tagServer.ComparisionQueryBitMapIndex(queryInfo, exclusionBitMap);
+            var result = tagServer.ComparisionQueryBitMapIndex(queryInfo, exclusionBitMap, printLoggingMessages: true);
             var errors = tagServer.GetInvalidResults(result.Questions, queryInfo);
 
             if (errors.Any())
@@ -275,12 +275,10 @@ namespace StackOverflowTagServer
                 using (Utils.SetConsoleColour(ConsoleColor.Red))
                     Logger.Log("ERROR Running \"{0}\" Query, {1} (out of {2}) results were invalid",
                                queryInfo.Operator, errors.Count, result.Questions.Count);
-
                 foreach (var qu in errors)
                 {
                     Logger.Log("  {0,8}: {1}", qu.Id, String.Join(", ", qu.Tags));
                 }
-
                 Logger.Log();
             }
 
@@ -298,7 +296,6 @@ namespace StackOverflowTagServer
                     {
                         Logger.Log("  {0,8}: {1} -> {2}", error.Item1.Id, String.Join(", ", error.Item1.Tags), error.Item2);
                     }
-
                     Logger.Log();
                 }
             }
