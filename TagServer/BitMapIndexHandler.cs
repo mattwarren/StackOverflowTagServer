@@ -1,10 +1,13 @@
 ﻿using Ewah;
 using Shared;
+using StackOverflowTagServer.CLR;
 using StackOverflowTagServer.DataStructures;
+using StackOverflowTagServer.Querying;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 
 using TagByQueryBitMapLookup = System.Collections.Generic.Dictionary<string, Ewah.EwahCompressedBitArray>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
@@ -19,6 +22,8 @@ namespace StackOverflowTagServer
         private readonly Func<QueryType, TagByQueryLookup> GetTagByQueryLookup;
         private readonly Func<QueryType, TagByQueryBitMapLookup> GetTagByQueryBitMapLookup;
 
+        private readonly ThreadLocal<HashSetCache<int>> cache;
+
         internal BitMapIndexHandler(List<Question> questions,
                                     TagLookup allTags,
                                     Func<QueryType, TagByQueryLookup> getTagByQueryLookup,
@@ -28,6 +33,7 @@ namespace StackOverflowTagServer
             this.allTags = allTags;
             this.GetTagByQueryLookup = getTagByQueryLookup;
             this.GetTagByQueryBitMapLookup = getTagByQueryBitMapLookup;
+            cache = new ThreadLocal<HashSetCache<int>>(() => new HashSetCache<int>(initialSize: questions.Count, comparer: new IntComparer()));
         }
 
         internal EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType)
@@ -37,7 +43,7 @@ namespace StackOverflowTagServer
             var bitMap = new EwahCompressedBitArray();
 
             var collectIdsTimer = Stopwatch.StartNew();
-            var excludedQuestionIds = new HashSet<int>();
+            var excludedQuestionIds = cache.Value.GetCachedHashSet();
             foreach (var tag in tagsToExclude)
             {
                 foreach (var id in tagLookupForQueryType[tag])

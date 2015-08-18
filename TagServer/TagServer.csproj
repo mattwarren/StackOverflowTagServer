@@ -94,6 +94,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BitMapIndexHandler.cs" />
+    <Compile Include="CLR\HashSetCache.cs" />
     <Compile Include="EWAH\BufferedRunningLengthWord.cs" />
     <Compile Include="EWAH\EwahCompressedBitArray.cs" />
     <Compile Include="EWAH\EwahCompressedBitArraySerializer.cs" />

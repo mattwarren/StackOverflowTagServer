@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 
-using HashSet = StackOverflowTagServer.CLR.HashSet<int>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 
 namespace StackOverflowTagServer.Querying
@@ -187,7 +186,7 @@ namespace StackOverflowTagServer.Querying
             var queryResult = new ComplexQueryResult { Results = new List<Question>(pageSize), BaseQueryCounter = 0, ItemsSkipped = 0, ExcludedCounter = 0 };
 
             // From https://github.com/ungood/EduLinq/blob/master/Edulinq/Intersect.cs#L28-L42
-            var andHashSet = GetCachedHashSet(tag2Ids);
+            var andHashSet = cache.Value.GetCachedHashSet(tag2Ids);
             foreach (var item in tag1Ids)
             {
                 if (queryResult.Results.Count >= pageSize)
@@ -217,7 +216,7 @@ namespace StackOverflowTagServer.Querying
             var queryResult = new ComplexQueryResult { Results = new List<Question>(pageSize), BaseQueryCounter = 0, ItemsSkipped = 0, ExcludedCounter = 0 };
 
             // https://github.com/ungood/EduLinq/blob/master/Edulinq/Except.cs#L26-L40
-            var notHashSet = GetCachedHashSet(tag2Ids);
+            var notHashSet = cache.Value.GetCachedHashSet(tag2Ids);
             foreach (var item in tag1Ids)
             {
                 if (queryResult.Results.Count >= pageSize)
@@ -252,7 +251,7 @@ namespace StackOverflowTagServer.Querying
             //  2) process this item
             //  3) repeat 1) again
             // From http://referencesource.microsoft.com/#System.Core/System/Linq/Enumerable.cs,2b8d0f02389aab71
-            var alreadySeen = GetCachedHashSet();
+            var alreadySeen = cache.Value.GetCachedHashSet();
             using (IEnumerator<int> e1 = tag1Ids.AsEnumerable().GetEnumerator())
             using (IEnumerator<int> e2 = tag2Ids.AsEnumerable().GetEnumerator())
             {
@@ -301,8 +300,8 @@ namespace StackOverflowTagServer.Querying
         {
             var queryResult = new ComplexQueryResult { Results = new List<Question>(pageSize), BaseQueryCounter = 0, ItemsSkipped = 0, ExcludedCounter = 0 };
 
-            var orNotHashSet = GetCachedHashSet(tag2Ids);
-            var seenBefore = new HashSet(); //TODO can't cache more that 1 HashSet per/thread!!
+            var orNotHashSet = cache.Value.GetCachedHashSet(tag2Ids);
+            var seenBefore = secondCache.Value.GetCachedHashSet();
             using (IEnumerator<int> e1 = tag1Ids.AsEnumerable().GetEnumerator())
             using (IEnumerator<int> e2 = allTagIds.AsEnumerable().GetEnumerator())
             {

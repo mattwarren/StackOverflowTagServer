@@ -1,11 +1,10 @@
 ﻿using Shared;
+using StackOverflowTagServer.CLR;
 using StackOverflowTagServer.DataStructures;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Threading;
 
-using HashSet = StackOverflowTagServer.CLR.HashSet<int>;
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 
 namespace StackOverflowTagServer.Querying
@@ -21,29 +20,9 @@ namespace StackOverflowTagServer.Querying
             this.GetTagByQueryLookup = getTagByQueryLookup;
         }
 
-        protected readonly Lazy<HashSet> HashSetCache = new Lazy<HashSet>(() =>
-        {
-            var hashSet = new HashSet(new IntComparer());
-            var initialiseMethod = typeof(HashSet).GetMethod("Initialize", BindingFlags.NonPublic | BindingFlags.Instance);
-            var exclusionCount = 8500000; // 8.5 million, more than enough, our data-set only has 7.9million questions!
-            initialiseMethod.Invoke(hashSet, new object[] { exclusionCount });
-            return hashSet;
-        }, LazyThreadSafetyMode.ExecutionAndPublication);
-
-        protected HashSet GetCachedHashSet(IEnumerable<int> populateHashSet)
-        {
-            var hashSet = HashSetCache.Value;
-            hashSet.Clear();
-            hashSet.UnionWith(populateHashSet);
-            return hashSet;
-        }
-
-        protected HashSet GetCachedHashSet()
-        {
-            var hashSet = HashSetCache.Value;
-            hashSet.Clear();
-            return hashSet;
-        }
+        // 8.5 million is more than enough, our data-set only has 7.9 million questions!
+        protected ThreadLocal<HashSetCache<int>> cache = new ThreadLocal<HashSetCache<int>>(() => new HashSetCache<int>(initialSize: 850000, comparer: new IntComparer()));
+        protected ThreadLocal<HashSetCache<int>> secondCache = new ThreadLocal<HashSetCache<int>>(() => new HashSetCache<int>(initialSize: 850000, comparer: new IntComparer()));
 
         protected Func<Question, string> GetFieldSelector(QueryType type)
         {

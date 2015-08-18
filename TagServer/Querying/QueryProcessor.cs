@@ -92,7 +92,7 @@ namespace StackOverflowTagServer.Querying
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
-            var baseHashSet = GetCachedHashSet(queryInfo[tag]);
+            var baseHashSet = cache.Value.GetCachedHashSet(queryInfo[tag]);
             foreach (var excludedTag in excludedTags)
             {
                 foreach (var qu in queryInfo[excludedTag])
@@ -137,11 +137,7 @@ namespace StackOverflowTagServer.Querying
             Func<Question, string> fieldSelector = GetFieldSelector(type);
             ThrowIfInvalidParameters(tag, pageSize, queryInfo);
 
-            //var exclusionCount = 8000000; // 8 million, more than enough (getting an exact count could be expensive)!!
-            //var exclusions = new HashSet(new IntComparer());
-            ////ensure the HashSet is pre-sized, so it doesn't have to re-size as we add items
-            //initialiseMethod.Invoke(exclusions, new object[] { exclusionCount });
-            var exclusions = GetCachedHashSet();
+            var exclusions = cache.Value.GetCachedHashSet();
             foreach (var excludedTag in excludedTags)
             {
                 foreach (var qu in queryInfo[excludedTag])
