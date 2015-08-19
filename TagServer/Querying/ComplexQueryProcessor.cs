@@ -198,9 +198,8 @@ namespace StackOverflowTagServer.Querying
                 {
                     queryResult.ExcludedCounter++;
                 }
-                else if (andHashSet.Contains(item))
+                else if (andHashSet.Remove(item))
                 {
-                    andHashSet.Remove(item);
                     if (queryResult.ItemsSkipped >= skip)
                         queryResult.Results.Add(questions[item]);
                     else
