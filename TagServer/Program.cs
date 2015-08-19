@@ -48,6 +48,9 @@ namespace StackOverflowTagServer
             var leppieTags = Utils.GetLeppieTagsFromResource();
             //var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
             //var expandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, new List<string>(new [] { "*c#*" }));
+            var expandedTagsTemp = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, leppieTags, nGrams, printLoggingMessages: true);
+            var bitMapTemp = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsTemp, QueryType.Score, printLoggingMessages: true);
+            RunComparisonQueries(tagServer, expandedTagsTemp, bitMapTemp);
 
             var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, leppieTags, nGrams);
             //var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, new List<string>(new[] { "*c#*" }), nGrams);
@@ -301,34 +304,40 @@ namespace StackOverflowTagServer
             }
         }
 
-        private static void RunComparisonQueries(TagServer tagServer)
+        private static void RunComparisonQueries(TagServer tagServer, CLR.HashSet<string> tagsToExclude, EwahCompressedBitArray exclusionBitMap)
         {
             var smallTag = tagServer.AllTags.Where(t => t.Value <= 200).First().Key;
             string largeTag = ".net";
             int pageSize = 25;
 
             // LARGE 1st Tag, SMALL 2nd Tag
-            RunAndOrNotComparisionQueries(tagServer, tag1: largeTag, tag2: smallTag, pageSize: pageSize);
+            //RunAndOrNotComparisionQueries(tagServer, tag1: largeTag, tag2: smallTag, pageSize: pageSize);
             // SMALL 1st Tag, LARGE 2nd Tag
-            RunAndOrNotComparisionQueries(tagServer, tag1: smallTag, tag2: largeTag, pageSize: pageSize);
+            //RunAndOrNotComparisionQueries(tagServer, tag1: smallTag, tag2: largeTag, pageSize: pageSize);
 
             // 2 large tags (probably the worst case)
-            RunAndOrNotComparisionQueries(tagServer, "c#", "jquery", pageSize);
+            //RunAndOrNotComparisionQueries(tagServer, "c#", "jquery", pageSize);
+            //RunAndOrNotComparisionQueries(tagServer, ".net", "jquery", pageSize);
+            RunAndOrNotComparisionQueriesWithExclusions(tagServer, ".net", "jquery", pageSize, tagsToExclude, exclusionBitMap);
         }
 
         private static void RunAndOrNotComparisionQueries(TagServer tagServer, string tag1, string tag2, int pageSize)
         {
             Console.ForegroundColor = ConsoleColor.Green;
             Logger.LogStartupMessage("\nComparison queries:\n\t\"{0}\" has {1:N0} questions\n\t\"{2}\" has {3:N0} questions",
-                              tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
+                                     tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
             Console.ResetColor();
 
-            var queries = new[] { "AND", "OR", "NOT", "OR-NOT" };
+            var queries = new[] { "AND", "OR", "AND-NOT", "OR-NOT" };
             var skipCounts = new[] { 0, 100, 250, 500, 1000, 2000, 4000, 8000 };
             foreach (var query in queries)
             {
                 Results.CreateNewFile(string.Format("Results-{0}-{1}-{2}-{3}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss"), tag1, query, tag2));
-                Results.AddHeaders("Skip Count", "Regular", "Regular", "Regular", "No LINQ", "No LINQ", "No LINQ");
+                Results.AddHeaders("Skip Count",
+                                   String.Format("Regular {0} {1} {2}", tag1, query, tag2),
+                                   String.Format("Regular {0} {1} {2}", tag2, query, tag1),
+                                   String.Format("BitMap {0} {1} {2}", tag1, query, tag2),
+                                   String.Format("BitMap {0} {1} {2}", tag2, query, tag1));
 
                 Console.ForegroundColor = ConsoleColor.Red;
                 Logger.LogStartupMessage("\n{0} Comparison queries: {1} {0} {2}\n", query, tag1, tag2);
@@ -338,23 +347,66 @@ namespace StackOverflowTagServer
                     Results.AddData(skipCount.ToString());
                     Console.ForegroundColor = ConsoleColor.DarkGreen;
                     var info = new QueryInfo { Type = QueryType.ViewCount, Tag = tag1, OtherTag = tag2, Operator = query, PageSize = pageSize, Skip = skipCount };
-                    var result1 = tagServer.ComparisonQuery(info);
+                    var result1 = tagServer.ComparisonQueryNoLINQ(info);
                     info.Tag = tag2; info.OtherTag = tag1; // reverse the 2 tags
-                    var result2 = tagServer.ComparisonQuery(info);
-                    info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
-                    var result3 = tagServer.ComparisonQuery(info);
+                    var result2 = tagServer.ComparisonQueryNoLINQ(info);
 
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
-                    var result4 = tagServer.ComparisonQueryNoLINQ(info);
+                    var result3 = tagServer.ComparisionQueryBitMapIndex(info);
                     info.Tag = tag2; info.OtherTag = tag1; // reverse the 2 tags
-                    var result5 = tagServer.ComparisonQueryNoLINQ(info);
-                    info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
-                    var result6 = tagServer.ComparisonQueryNoLINQ(info);
+                    var result4 = tagServer.ComparisionQueryBitMapIndex(info);
 
-                    Utils.CompareLists(result1.Questions, "Regular", result4.Questions, "No LINQ");
-                    Utils.CompareLists(result2.Questions, "Regular", result5.Questions, "No LINQ");
-                    Utils.CompareLists(result3.Questions, "Regular", result6.Questions, "No LINQ");
+                    Utils.CompareLists(result1.Questions, "Regular", result3.Questions, "BitMap");
+                    Utils.CompareLists(result2.Questions, "Regular", result4.Questions, "BitMap");
+
+                    Console.ResetColor();
+                    Results.StartNewRow();
+                }
+
+                Results.CloseFile();
+            }
+        }
+
+        private static void RunAndOrNotComparisionQueriesWithExclusions(TagServer tagServer, string tag1, string tag2, int pageSize,
+                                                                        CLR.HashSet<string> tagsToExclude, EwahCompressedBitArray exclusionBitMap)
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Logger.LogStartupMessage("\nComparison queries (with Exclusions):\n\t\"{0}\" has {1:N0} questions\n\t\"{2}\" has {3:N0} questions",
+                                     tag1, tagServer.AllTags[tag1], tag2, tagServer.AllTags[tag2]);
+            Console.ResetColor();
+
+            var queries = new[] { "AND", "OR", "AND-NOT", "OR-NOT" };
+            var skipCounts = new[] { 0, 100, 250, 500, 1000, 2000, 4000, 8000 };
+            foreach (var query in queries)
+            {
+                Results.CreateNewFile(string.Format("Results-With-Exclusions-{0}-{1}-{2}-{3}.csv", DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss"), tag1, query, tag2));
+                Results.AddHeaders("Skip Count",
+                                   String.Format("Regular {0} {1} {2}", tag1, query, tag2),
+                                   String.Format("Regular {0} {1} {2}", tag2, query, tag1),
+                                   String.Format("BitMap {0} {1} {2}", tag1, query, tag2),
+                                   String.Format("BitMap {0} {1} {2}", tag2, query, tag1));
+
+                Console.ForegroundColor = ConsoleColor.Red;
+                Logger.LogStartupMessage("\n{0} Comparison queries (with Exclusions): {1} {0} {2}\n", query, tag1, tag2);
+                Console.ResetColor();
+                foreach (var skipCount in skipCounts)
+                {
+                    Results.AddData(skipCount.ToString());
+                    Console.ForegroundColor = ConsoleColor.DarkGreen;
+                    var info = new QueryInfo { Type = QueryType.ViewCount, Tag = tag1, OtherTag = tag2, Operator = query, PageSize = pageSize, Skip = skipCount };
+                    var result1 = tagServer.ComparisonQueryNoLINQ(info, tagsToExclude);
+                    info.Tag = tag2; info.OtherTag = tag1; // reverse the 2 tags
+                    var result2 = tagServer.ComparisonQueryNoLINQ(info, tagsToExclude);
+
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
+                    var result3 = tagServer.ComparisionQueryBitMapIndex(info, exclusionBitMap);
+                    info.Tag = tag2; info.OtherTag = tag1; // reverse the 2 tags
+                    var result4 = tagServer.ComparisionQueryBitMapIndex(info, exclusionBitMap);
+
+                    Utils.CompareLists(result1.Questions, "Regular", result3.Questions, "BitMap");
+                    Utils.CompareLists(result2.Questions, "Regular", result4.Questions, "BitMap");
 
                     Console.ResetColor();
                     Results.StartNewRow();
