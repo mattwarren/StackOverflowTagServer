@@ -82,7 +82,7 @@ namespace Server.Controllers
         {
             return new
             {
-                Operator = queryInfo.Operator, // In QueryInfo this is just printed as the number, i.e. "3", rather than "ViewCount"
+                QueryType = queryInfo.Type.ToString(), // In QueryInfo this is just printed as the number, i.e. "3", rather than "ViewCount"
                 QueryInfo = queryInfo,
                 HttpContext.Current.Request.Path,
                 HttpContext.Current.Request.RawUrl,

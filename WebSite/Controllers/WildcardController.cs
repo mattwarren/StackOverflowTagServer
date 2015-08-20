@@ -29,9 +29,9 @@ namespace Server.Controllers
             var expandedTags = WildcardProcessor.ExpandTagsNGrams(allTags, initialWildcards, nGrams);
             wildcardExpansionTimer.Stop();
 
-            var bitMapTimer = Stopwatch.StartNew();
-            var bitMapIndex = WebApiApplication.TagServer.Value.CreateBitMapIndexForExcludedTags(expandedTags, QueryType.Score);
-            bitMapTimer.Stop();
+            //var bitMapTimer = Stopwatch.StartNew();
+            //var bitMapIndex = WebApiApplication.TagServer.Value.CreateBitMapIndexForExcludedTags(expandedTags, QueryType.Score);
+            //bitMapTimer.Stop();
 
             timer.Stop();
 
@@ -39,14 +39,19 @@ namespace Server.Controllers
             {
                 TotalElapsedMilliseconds = timer.Elapsed.TotalMilliseconds.ToString("N2") + " ms",
                 WildcardExpansionMilliseconds = wildcardExpansionTimer.Elapsed.TotalMilliseconds.ToString("N2") + " ms",
-                BitMapCreationMilliseconds = bitMapTimer.Elapsed.TotalMilliseconds.ToString("N2") + " ms",
-                QuestionsIncludingExpandedTags = ((ulong)WebApiApplication.TagServer.Value.Questions.Count - bitMapIndex.GetCardinality()).ToString("N0"),
+                //BitMapCreationMilliseconds = bitMapTimer.Elapsed.TotalMilliseconds.ToString("N2") + " ms",
+                //QuestionsIncludingExpandedTags = ((ulong)WebApiApplication.TagServer.Value.Questions.Count - bitMapIndex.GetCardinality()).ToString("N0"),
                 InitialWildcards = useLeppieWildcards ? "USING Leppie's Wildcards, list to big to print!!!" : String.Join(" - ", initialWildcards),
                 ExpandedTagsCount = expandedTags.Count.ToString("N0"),
                 ExpandedWildcardCount = initialWildcards.Where(w => w.Contains('*'))
-                                                        .ToDictionary(w => w, w => WildcardProcessor.ExpandTagsNGrams(allTags, new List<string>(new[] { w }), nGrams).Count),
+                                                        .ToDictionary(w => w, w => WildcardProcessor.ExpandTagsNGrams(allTags, new List<string>(new[] { w }), nGrams).Count)
+                                                        .OrderByDescending(g => g.Value)
+                                                        .ThenBy(g => g.Key)
+                                                        .ToDictionary(g => g.Key, g => g.Value),
                 ExpandedWildcard = initialWildcards.Where(w => w.Contains('*'))
-                                                   .ToDictionary(w => w, w => WildcardProcessor.ExpandTagsNGrams(allTags, new List<string>(new[] { w }), nGrams)),
+                                                   .ToDictionary(w => w, w => WildcardProcessor.ExpandTagsNGrams(allTags, new List<string>(new[] { w }), nGrams))
+                                                   .OrderBy(g => g.Key)
+                                                   .ToDictionary(g => g.Key, g => g.Value),
             };
         }
 

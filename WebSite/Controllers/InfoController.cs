@@ -51,7 +51,6 @@ namespace Server.Controllers
                         { urlRoot + "Query/.net?operator=OR&otherTag=jquery", "OR, i.e. 'C# OR jQuery'" },
                         { urlRoot + "Query/.net?operator=OR-NOT&otherTag=jquery", "OR NOT, i.e. 'C# OR NOT jQuery'" },
                         { urlRoot + "Query/.net?operator=OR-NOT&otherTag=jquery&useLinq=true", "OR NOT, i.e. 'C# OR NOT jQuery' BUT using LINQ" },
-                        { urlRoot + "Query/.net?operator=NOT&otherTag=jquery", "NOT, i.e. 'C# NOT jQuery'" },
                     }.ToArray(),
                     AdvancedQueryParameters = new Dictionary<string, string>
                     {
