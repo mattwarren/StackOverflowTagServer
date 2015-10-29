@@ -204,6 +204,8 @@ namespace StackOverflowTagServer
                     if (expandedTagsNGrams.Contains(tag))
                         invalidQuestions.Add(Tuple.Create(question, tag));
                 }
+                // Sometimes the validitation locks up my laptop, this *seems* to make a difference?!
+                Thread.Yield();
             }
 
             using (Utils.SetConsoleColour(ConsoleColor.Blue))

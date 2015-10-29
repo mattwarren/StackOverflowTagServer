@@ -113,6 +113,8 @@ namespace StackOverflowTagServer.Querying
 
             timer.Stop();
 
+            Results.AddData(timer.Elapsed.TotalMilliseconds.ToString("#.##"));
+
             if (printLoggingMessages)
             {
                 using (Utils.SetConsoleColour(ConsoleColor.DarkYellow))
