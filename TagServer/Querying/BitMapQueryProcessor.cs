@@ -17,16 +17,6 @@ namespace StackOverflowTagServer.Querying
         private readonly Func<QueryType, TagByQueryBitMapLookup> GetTagByQueryBitMapLookup;
         private readonly TagLookup allTags;
 
-        private static Dictionary<QueryType, Func<Question, string>> queryTypeLookup =
-            new Dictionary<QueryType, Func<Question, string>>
-                {
-                            { QueryType.AnswerCount, qu => qu.AnswerCount.HasValue ? qu.AnswerCount.Value.ToString("N0") : "<NULL>" },
-                            { QueryType.CreationDate, qu => qu.CreationDate.ToString() },
-                            { QueryType.LastActivityDate, qu => qu.LastActivityDate.ToString() },
-                            { QueryType.Score, qu => qu.Score.HasValue ? qu.Score.Value.ToString("N0") : "<NULL>" },
-                            { QueryType.ViewCount, qu => qu.ViewCount.HasValue ? qu.ViewCount.Value.ToString("N0") : "<NULL>" }
-                };
-
         internal BitMapQueryProcessor(List<Question> questions,
                                       TagLookup allTags,
                                       Func<QueryType, TagByQueryLookup> getQueryTypeInfo,
@@ -46,10 +36,9 @@ namespace StackOverflowTagServer.Querying
                 Logger.Log("Tag \"{0}\" is in {1:N0} Questions, Tag \"{2}\" is in {3:N0} Questions",
                            info.Tag, allTags[info.Tag], info.OtherTag, allTags[info.OtherTag]);
 
-            //var fieldFetcher = queryTypeLookup[info.Type];
-            //PrintResults(Enumerable.Range(0, questionLookup.Length), questionLookup, ALL_TAGS_KEY, queryType, fieldFetcher);
-            //PrintResults(bitMap[tag1], questionLookup, tag1, queryType, fieldFetcher);
-            //PrintResults(bitMap[tag2], questionLookup, tag2, queryType, fieldFetcher);
+            //PrintResults(Enumerable.Range(0, questionLookup.Length), qu => questionLookup[qu], TagServer.ALL_TAGS_KEY, info.Type);
+            //PrintResults(bitMap[info.Tag], qu => questionLookup[qu], info.Tag, info.Type);
+            //PrintResults(bitMap[info.OtherTag], qu => questionLookup[qu], info.OtherTag, info.Type);
 
             var timer = Stopwatch.StartNew();
             var tag1BitMap = bitMap[info.Tag];
@@ -124,7 +113,7 @@ namespace StackOverflowTagServer.Querying
                     Logger.Log("Took {0,5:N2} ms in TOTAL to calculate \"{1} {2} {3}\"",
                                timer.Elapsed.TotalMilliseconds, info.Tag, info.Operator, info.OtherTag);
                 }
-                //PrintResults(bitMapResult, questionLookup, string.Format("{0} {1} {2)", tag1, @operator, tag2), queryType, fieldFetcher);
+                //PrintResults(bitMapResult, qu => questionLookup[qu], string.Format("{0} {1} {2}", info.Tag, info.Operator, info.OtherTag), info.Type);
                 Logger.Log();
             }
 
@@ -138,18 +127,6 @@ namespace StackOverflowTagServer.Querying
                 //    { "ExclusionCounter", exclusionCounter.Counter }
                 //}
             };
-        }
-
-        private void PrintResults(IEnumerable<int> bits, int[] questionLookup, string info, QueryType queryType, Func<Question, string> fieldFetcher)
-        {
-            Logger.Log("RESULTS for \"{0}\":", info);
-            foreach (var bit in bits.Take(10))
-            {
-                var questionId = questionLookup[bit];
-                var question = questions[questionId];
-                Logger.Log("  Bit=[{0,9:N0}] -> Qu=[{1,9:N0}], {2}={3,10:N0}, Tags= {4}",
-                           bit, questionId, queryType, fieldFetcher(question), String.Join(", ", question.Tags));
-            }
         }
     }
 }

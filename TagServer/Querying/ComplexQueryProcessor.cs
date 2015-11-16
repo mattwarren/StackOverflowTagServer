@@ -94,6 +94,8 @@ namespace StackOverflowTagServer.Querying
             Logger.Log("Got {0:} results in total, tag1 QueryCounter = {1:N0}, tag2 QueryCounter = {1:N0}",
                        results.Count(), tagCounter, otherTagCounter);
 
+            //PrintResults(results, string.Format("{0} {1} {2}", info.Tag, info.Operator, info.OtherTag), info.Type);
+
             return new QueryResult
             {
                 Questions = results,
