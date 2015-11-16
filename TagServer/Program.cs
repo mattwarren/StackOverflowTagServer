@@ -243,6 +243,7 @@ namespace StackOverflowTagServer
                     Tuple.Create(".net-3.5", "c#"), // small -> large
                 };
 
+                // Run queries WITHOUT exclusion Bit Map Index
                 using (Utils.SetConsoleColour(ConsoleColor.Green))
                     Logger.Log("Running \"{0}\" Queries", @operator);
 
@@ -253,6 +254,7 @@ namespace StackOverflowTagServer
                             new QueryInfo { Tag = pairing.Item1, OtherTag = pairing.Item2, Type = queryTypeToTest, Operator = @operator });
                 }
 
+                // Run queries WITH exclusion Bit Map Index
                 using (Utils.SetConsoleColour(ConsoleColor.Green))
                     Logger.Log("Running \"{0}\" Queries and using an Exclusion Bit Map Index", @operator);
 
@@ -273,7 +275,6 @@ namespace StackOverflowTagServer
         {
             var result = tagServer.ComparisionQueryBitMapIndex(queryInfo, exclusionBitMap, printLoggingMessages: true);
             var errors = tagServer.GetInvalidResults(result.Questions, queryInfo);
-
             if (errors.Any())
             {
                 using (Utils.SetConsoleColour(ConsoleColor.Red))
@@ -289,16 +290,14 @@ namespace StackOverflowTagServer
             if (tagsToExclude != null && exclusionBitMap != null)
             {
                 var shouldHaveBeenExcluded = tagServer.GetShouldHaveBeenExcludedResults(result.Questions, queryInfo, tagsToExclude);
-
                 if (shouldHaveBeenExcluded.Any())
                 {
                     using (Utils.SetConsoleColour(ConsoleColor.Red))
                         Logger.Log("ERROR Running \"{0}\" Query, {1} (out of {2}) questions should have been excluded",
-                                   queryInfo.Operator, shouldHaveBeenExcluded.Count, result.Questions.Count);
-
+                                   queryInfo.Operator, shouldHaveBeenExcluded.Select(s => s.Item1.Id).Distinct().Count(), result.Questions.Count);
                     foreach (var error in shouldHaveBeenExcluded)
                     {
-                        Logger.Log("  {0,8}: {1} -> {2}", error.Item1.Id, String.Join(", ", error.Item1.Tags), error.Item2);
+                        Logger.Log("  {0,8}: {1} -> {2}", error.Item1.Id, String.Join(", ", error.Item1.Tags), string.Join(", ", error.Item2));
                     }
                     Logger.Log();
                 }
