@@ -17,8 +17,7 @@ namespace StackOverflowTagServer.Querying
         private readonly Func<QueryType, TagByQueryBitMapLookup> GetTagByQueryBitMapLookup;
         private readonly TagLookup allTags;
 
-        internal BitMapQueryProcessor(List<Question> questions,
-                                      TagLookup allTags,
+        internal BitMapQueryProcessor(List<Question> questions, TagLookup allTags,
                                       Func<QueryType, TagByQueryLookup> getQueryTypeInfo,
                                       Func<QueryType, TagByQueryBitMapLookup> getTagByQueryBitMapLookup)
             : base(questions, getQueryTypeInfo)
@@ -31,6 +30,9 @@ namespace StackOverflowTagServer.Querying
         {
             var bitMap = GetTagByQueryBitMapLookup(info.Type);
             var questionLookup = GetTagByQueryLookup(info.Type)[TagServer.ALL_TAGS_KEY];
+
+            // Calculating the Cardinality can be (is?) expensive, we don't want to do it in Queries unless we really need to!?
+            bool calculateCardinality = true; // false
 
             if (printLoggingMessages)
                 Logger.Log("Tag \"{0}\" is in {1:N0} Questions, Tag \"{2}\" is in {3:N0} Questions",
@@ -84,13 +86,14 @@ namespace StackOverflowTagServer.Querying
 
                 if (printLoggingMessages)
                 {
-                    Logger.Log("Took {0,5:N2} ms to apply exclusion BitMap (Cardinality={1:N0}), Results Cardinality: Before={2:N0}, After={3:N0}",
-                               exclusionTimer.Elapsed.TotalMilliseconds, exclusionBitMap.GetCardinality(), cardinalityBeforeExclusions, bitMapResult.GetCardinality());
-                    //Logger.Log("Took {0,5:N2} ms to apply exclusion BitMap", exclusionTimer.Elapsed.TotalMilliseconds);
+                    if (calculateCardinality)
+                        Logger.Log("Took {0,5:N2} ms to apply exclusion BitMap (Cardinality={1:N0}), Results Cardinality: Before={2:N0}, After={3:N0}",
+                                   exclusionTimer.Elapsed.TotalMilliseconds, exclusionBitMap.GetCardinality(), cardinalityBeforeExclusions, bitMapResult.GetCardinality());
+                    else
+                        Logger.Log("Took {0,5:N2} ms to apply exclusion BitMap", exclusionTimer.Elapsed.TotalMilliseconds);
                 }
             }
 
-            // TODO work out if we can improve the speed of this, can take almsot 100 ms?!
             var resultCollectionTimer = Stopwatch.StartNew();
             var result = bitMapResult.Skip(info.Skip)
                                      .Take(info.PageSize)
@@ -108,10 +111,12 @@ namespace StackOverflowTagServer.Querying
             {
                 using (Utils.SetConsoleColour(ConsoleColor.DarkYellow))
                 {
-                    //Logger.Log("Took {0,5:N2} ms in TOTAL to calculate \"{1} {2} {3}\" (Result Cardinality={4:N0})",
-                    //           timer.Elapsed.TotalMilliseconds, info.Tag, info.Operator, info.OtherTag, bitMapResult.GetCardinality());
-                    Logger.Log("Took {0,5:N2} ms in TOTAL to calculate \"{1} {2} {3}\"",
-                               timer.Elapsed.TotalMilliseconds, info.Tag, info.Operator, info.OtherTag);
+                    if (calculateCardinality)
+                        Logger.Log("Took {0,5:N2} ms in TOTAL to calculate \"{1} {2} {3}\", Got {4} results, (Result Cardinality={5:N0})",
+                                   timer.Elapsed.TotalMilliseconds, info.Tag, info.Operator, info.OtherTag, result.Count, bitMapResult.GetCardinality());
+                    else
+                        Logger.Log("Took {0,5:N2} ms in TOTAL to calculate \"{1} {2} {3}\", Got {4} results",
+                                   timer.Elapsed.TotalMilliseconds, info.Tag, info.Operator, info.OtherTag, result.Count);
                 }
                 //PrintResults(bitMapResult, qu => questionLookup[qu], string.Format("{0} {1} {2}", info.Tag, info.Operator, info.OtherTag), info.Type);
                 Logger.Log();
@@ -120,6 +125,7 @@ namespace StackOverflowTagServer.Querying
             return new QueryResult
             {
                 Questions = result,
+                // TODO see if we can get meaningful numbers here, WITHOUT calling GetCardinality() (because it's expensive)
                 //Counters = new Dictionary<string, int>
                 //{
                 //    { "TagCounter", tagCounter },
