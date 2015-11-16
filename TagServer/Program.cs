@@ -87,8 +87,9 @@ namespace StackOverflowTagServer
 
         private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, HashSet leppieExpandedTags)
         {
-            Logger.LogStartupMessage("\nThere are {0:N0} questions and {1:N0} tags in total", rawQuestions.Count, allTags.Count);
-            Logger.LogStartupMessage("Leppie {0:N0} tags with wildcards expand to {1:N0} tags in total", leppieTags.Count, leppieExpandedTags.Count);
+            Logger.Log("\nThere are {0:N0} questions and {1:N0} tags in total", rawQuestions.Count, allTags.Count);
+            Logger.Log("Leppie list of {0:N0} tags contains {1:N0} that are wildcards", leppieTags.Count, leppieTags.Count(t => t.Contains('*')));
+            Logger.Log("Leppie {0:N0} tags with wildcards expand to {1:N0} tags in total", leppieTags.Count, leppieExpandedTags.Count);
             var remainingTagsHashSet = new CLR.HashSet<string>(allTags.Keys);
             remainingTagsHashSet.ExceptWith(leppieExpandedTags);
             Logger.LogStartupMessage("There are {0:N0} tags remaining, {0:N0} + {1:N0} = {2:N0} (Expected: {3:N0})",
@@ -98,14 +99,14 @@ namespace StackOverflowTagServer
             Logger.LogStartupMessage("Sanity checking excluded/included tags and questions...");
             var excludedQuestionCounter = rawQuestions.Count(question => question.Tags.Any(t => leppieExpandedTags.Contains(t)));
             var includedQuestionCounter = rawQuestions.Count(question => question.Tags.All(t => remainingTagsHashSet.Contains(t)));
-            Logger.LogStartupMessage("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})",
+            Logger.Log("{0:N0} EXCLUDED tags cover {1:N0} questions (out of {2:N0})",
                               leppieExpandedTags.Count, excludedQuestionCounter, rawQuestions.Count);
-            Logger.LogStartupMessage(
+            Logger.Log(
                 "{0:N0} remaining tags cover {1:N0} questions, {2:N0} + {3:N0} = {4:N0} (Expected: {5:N0})",
                 remainingTagsHashSet.Count, includedQuestionCounter,
                 includedQuestionCounter, excludedQuestionCounter,
                 includedQuestionCounter + excludedQuestionCounter, rawQuestions.Count);
-            Logger.LogStartupMessage();
+            Logger.Log();
         }
 
         private static HashSet ProcessTagsForFastLookup(TagLookup allTags, Trie<int> trie, NGrams nGrams, List<string> tagsToExpand)
