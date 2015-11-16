@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Reflection;
 
 namespace StackOverflowTagServer
@@ -19,21 +20,43 @@ namespace StackOverflowTagServer
 
         internal static void AddHeaders(params string [] headers)
         {
-            stream.WriteLine(string.Join(", ", headers));
-            stream.Flush();
+            try
+            {
+                stream.WriteLine(string.Join(", ", headers));
+                stream.Flush();
+            }
+            catch (ObjectDisposedException)
+            {
+                // swallow
+            }
         }
 
         internal static void StartNewRow()
         {
-            stream.WriteLine();
-            stream.Flush();
+            try
+            {
+                stream.WriteLine();
+                stream.Flush();
+            }
+            catch (ObjectDisposedException)
+            {
+                // swallow
+            }
         }
 
         internal static void AddData(string data)
         {
-            if (stream == null) return;
+            if (stream == null)
+                return;
 
-            stream.Write(data.EndsWith(",") ? data : data + ",");
+            try
+            {
+                stream.Write(data.EndsWith(",") ? data : data + ",");
+            }
+            catch (ObjectDisposedException)
+            {
+                // swallow
+            }
         }
 
         internal static void CloseFile()
