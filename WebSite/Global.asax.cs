@@ -59,6 +59,15 @@ namespace Server
             ListFolderInfo(dataFolder);
             Trace.WriteLine("Finished listing contents of Data folder: " + dataFolder);
 
+            Trace.WriteLine("StorageConnectionString: " + CloudConfigurationManager.GetSetting("StorageConnectionString"));
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(
+                CloudConfigurationManager.GetSetting("StorageConnectionString"));
+            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+            CloudBlobContainer container = blobClient.GetContainerReference("data");
+
+            ListBlobsInContainer(container);
+            //DownloadDataFiles(container, dataFolder);
+
             var questionsFileName = "Questions-NEW.bin";
             var questionsPath = Path.Combine(dataFolder, questionsFileName);
             if (File.Exists(questionsPath) == false)
@@ -66,7 +75,7 @@ namespace Server
                 if (Directory.Exists(dataFolder) == false)
                     Directory.CreateDirectory(dataFolder);
 
-                DownloadDataFiles(dataFolder);
+                DownloadDataFiles(container, dataFolder);
 
                 Trace.WriteLine("Data folder: " + dataFolder);
                 ListFolderInfo(dataFolder);
@@ -78,15 +87,8 @@ namespace Server
             return StackOverflowTagServer.TagServer.CreateFromSerialisedData(questions, dataFolder);
         }
 
-        private static void DownloadDataFiles(string dataFolder)
+        private static void DownloadDataFiles(CloudBlobContainer container, string dataFolder)
         {
-            Trace.WriteLine("StorageConnectionString: " + CloudConfigurationManager.GetSetting("StorageConnectionString"));
-            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(
-                CloudConfigurationManager.GetSetting("StorageConnectionString"));
-            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
-            CloudBlobContainer container = blobClient.GetContainerReference("data");
-            ListBlobsInContainer(container);
-
             foreach (IListBlobItem item in container.ListBlobs(null, false))
             {
                 if (item.GetType() == typeof(CloudBlockBlob))
