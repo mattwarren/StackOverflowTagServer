@@ -51,14 +51,25 @@ namespace StackOverflowTagServer
                 RunComparisonQueries(tagServer, expandedTags, bitMap, type);
             }
 
-            //var queryType = QueryType.Score;
-            //var bitMapTemp = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsTemp, queryType, printLoggingMessages: true);
-            //tagServer.ValidateExclusionBitMap(bitMapTemp, expandedTagsTemp, queryType);
-            //TestBitMapIndexQueries(tagServer, expandedTagsTemp, bitMapTemp, queryType);
-            //RunComparisonQueries(tagServer, expandedTagsTemp, bitMapTemp, queryType);
+            return;
 
+#if false // code that currently isn't run, because of the early "return" statement above
+            foreach (QueryType type in (QueryType[])Enum.GetValues(typeof(QueryType)))
+            {
+                using (Utils.SetConsoleColour(ConsoleColor.Green))
+                    Logger.Log("Creating Bit Map index for \"{0}\"", type);
+                //var expandedTags = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, leppieTags, nGrams, printLoggingMessages: true);
+                //var expandedTags = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, new List<string>(new[] { "*c#*" }), nGrams, printLoggingMessages: true);
+                var expandedTags = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, new List<string>(new[] { "*c#*", "*java*" }), nGrams, printLoggingMessages: true);
+                var bitMap = tagServer.CreateBitMapIndexForExcludedTags(expandedTags, type, printLoggingMessages: true);
+                //using (Utils.SetConsoleColour(ConsoleColor.DarkGreen))
+                //    Logger.Log(bitMap.ToDebugString(printEveryLiteralWord: false));
+                //tagServer.ValidateExclusionBitMap(bitMap, expandedTags, type);
+            }
+            return;
 
-
+            var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, leppieTags, nGrams, printLoggingMessages: true);
+            //var expandedTagsNGrams = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, new List<string>(new[] { "*c#*" }), nGrams, printLoggingMessages: true);
             var queryTypeToTest = QueryType.AnswerCount;
             var bitMapIndex = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsNGrams, queryTypeToTest, printLoggingMessages: true);
 
@@ -87,6 +98,7 @@ namespace StackOverflowTagServer
 
             //Logger.LogStartupMessage("Finished, press <ENTER> to exit");
             //Console.ReadLine();
+#endif
         }
 
         private static void GetLeppieTagInfo(List<Question> rawQuestions, TagLookup allTags, List<string> leppieTags, HashSet leppieExpandedTags)
@@ -340,7 +352,7 @@ namespace StackOverflowTagServer
             {
                 Results.CreateNewFile(string.Format("Results-{0}{1}-{2}-{3}-{4}-{5}.csv",
                                                     (tagsToExclude != null && exclusionBitMap != null) ? "With-Exclusions-" : "",
-                                                    DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss"), queryTypeToTest, tag1, query, tag2));
+                                                    DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss"), tag1, query, tag2, queryTypeToTest));
                 Results.AddHeaders("Skip Count",
                                    String.Format("Regular {0} {1} {2}", tag1, query, tag2),
                                    String.Format("LINQ {0} {1} {2}", tag1, query, tag2),
