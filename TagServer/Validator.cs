@@ -174,19 +174,22 @@ namespace StackOverflowTagServer
             return invalidResults;
         }
 
-        internal List<Tuple<Question, string>> GetShouldHaveBeenExcludedResults(List<Question> results, QueryInfo queryInfo, CLR.HashSet<string> tagsToExclude)
+        internal List<Tuple<Question, List<string>>> GetShouldHaveBeenExcludedResults(List<Question> results, QueryInfo queryInfo, CLR.HashSet<string> tagsToExclude)
         {
-            var errors = new List<Tuple<Question, string>>();
+            var errors = new List<Tuple<Question, List<string>>>();
             if (tagsToExclude == null)
                 return errors;
 
             foreach (var result in results)
             {
+                var invalidTags = new List<string>();
                 foreach (var tag in result.Tags)
                 {
                     if (tagsToExclude.Contains(tag))
-                        errors.Add(Tuple.Create(result, tag));
+                        invalidTags.Add(tag);
                 }
+                if (invalidTags.Count > 0)
+                    errors.Add(Tuple.Create(result, invalidTags));
             }
             return errors;
         }

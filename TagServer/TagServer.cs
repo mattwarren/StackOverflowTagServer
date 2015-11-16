@@ -282,7 +282,7 @@ namespace StackOverflowTagServer
             return validator.GetInvalidResults(results, queryInfo);
         }
 
-        public List<Tuple<Question, string>> GetShouldHaveBeenExcludedResults(List<Question> results, QueryInfo queryInfo, CLR.HashSet<string> tagsToExclude)
+        public List<Tuple<Question, List<string>>> GetShouldHaveBeenExcludedResults(List<Question> results, QueryInfo queryInfo, CLR.HashSet<string> tagsToExclude)
         {
             return validator.GetShouldHaveBeenExcludedResults(results, queryInfo, tagsToExclude);
         }
