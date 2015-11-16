@@ -39,12 +39,24 @@ namespace StackOverflowTagServer
             //PrintTagStats(tagServer.AllTags);
 
 
-            // <.net> and <c#> aren't in this lists, so they can be valid tags!
+            // Run a sanity check on all the query type, for the given exclusion list and nGrams
             var leppieTags = Utils.GetLeppieTagsFromResource();
-            //Trie<int> trie = WildcardProcessor.CreateTrie(tagServer.AllTags);
             NGrams nGrams = WildcardProcessor.CreateNGrams(tagServer.AllTags);
-            //var leppieExpandedTags = ProcessTagsForFastLookup(tagServer.AllTags, trie, nGrams, leppieTags);
-            var expandedTagsTemp = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, leppieTags, nGrams, printLoggingMessages: true);
+            var expandedTags = WildcardProcessor.ExpandTagsNGrams(tagServer.AllTags, leppieTags, nGrams, printLoggingMessages: true);
+            foreach (QueryType type in (QueryType[])Enum.GetValues(typeof(QueryType)))
+            {
+                var bitMap = tagServer.CreateBitMapIndexForExcludedTags(expandedTags, type, printLoggingMessages: true);
+                tagServer.ValidateExclusionBitMap(bitMap, expandedTags, type);
+                TestBitMapIndexQueries(tagServer, expandedTags, bitMap, type);
+                RunComparisonQueries(tagServer, expandedTags, bitMap, type);
+            }
+
+            //var queryType = QueryType.Score;
+            //var bitMapTemp = tagServer.CreateBitMapIndexForExcludedTags(expandedTagsTemp, queryType, printLoggingMessages: true);
+            //tagServer.ValidateExclusionBitMap(bitMapTemp, expandedTagsTemp, queryType);
+            //TestBitMapIndexQueries(tagServer, expandedTagsTemp, bitMapTemp, queryType);
+            //RunComparisonQueries(tagServer, expandedTagsTemp, bitMapTemp, queryType);
+
 
 
             var queryTypeToTest = QueryType.AnswerCount;
