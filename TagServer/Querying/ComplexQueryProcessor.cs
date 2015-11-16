@@ -43,9 +43,6 @@ namespace StackOverflowTagServer.Querying
                     break;
 
                 case "OR":
-                    // NOTE: Union on it's own isn't correct, it uses seq1.Concat(seq2).Distinct(),
-                    // so it pulls ALL items from seq1, before pulling ANY items from seq2
-
                     // TODO this has a small bug, we can get items out of order as we pull them thru in pairs
                     // if t2 has several items that are larger than t1, t1 will still come out first!!
                     // So algorithm needs to be:
@@ -59,6 +56,12 @@ namespace StackOverflowTagServer.Querying
                         query = AddExclusionsToQuery(query, tagsToExclude, exclusionCounter);
                     break;
                 case "OR-NOT": //"i.e. .net+or+jquery-"
+                    // TODO this has a small bug, we can get items out of order as we pull them thru in pairs
+                    // if t2 has several items that are larger than t1, t1 will still come out first!!
+                    // So algorithm needs to be:
+                    //  1) pull the LARGEST value (from t1 or t2)
+                    //  2) process this item
+                    //  3) repeat 1) again
                     query = tag1Query.Zip(queryInfo[TagServer.ALL_TAGS_KEY], (t1, t2) => new[] { t1, t2 })
                                          .SelectMany(item => item)
                                          .Except(tag2Query)
@@ -78,7 +81,7 @@ namespace StackOverflowTagServer.Querying
                     throw new InvalidOperationException(string.Format("Invalid operator specified: {0}", info.Operator ?? "<NULL>"));
             }
 
-            var result = query.Skip(info.Skip)
+            var results = query.Skip(info.Skip)
                             .Take(info.PageSize)
                             .Select(i => questions[i])
                             .ToList();
@@ -89,11 +92,11 @@ namespace StackOverflowTagServer.Querying
             Logger.Log("REGULAR  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) REGULAR",
                        info.Tag, info.Operator, info.OtherTag, info.PageSize, info.Skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
             Logger.Log("Got {0:} results in total, tag1 QueryCounter = {1:N0}, tag2 QueryCounter = {1:N0}",
-                       result.Count(), tagCounter, otherTagCounter);
+                       results.Count(), tagCounter, otherTagCounter);
 
             return new QueryResult
             {
-                Questions = result,
+                Questions = results,
                 Counters = new Dictionary<string, int>
                 {
                     { "TagCounter", tagCounter },
@@ -139,7 +142,6 @@ namespace StackOverflowTagServer.Querying
                 case "AND":
                     queryResult = AndQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
                     break;
-
                 case "AND-NOT":
                     queryResult = AndNotQuery(queryInfo[info.Tag], queryInfo[info.OtherTag], info.PageSize, info.Skip, tagsToExclude);
                     break;
@@ -165,7 +167,7 @@ namespace StackOverflowTagServer.Querying
 
             Logger.Log("NO LINQ  Boolean Query: \"{0}\" {1} \"{2}\", pageSize = {3:N0}, skip = {4:N0}, took {5} ({6:N2} ms) NO LINQ",
                        info.Tag, info.Operator, info.OtherTag, info.PageSize, info.Skip, timer.Elapsed, timer.Elapsed.TotalMilliseconds);
-            Logger.Log("Got {0:} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4} tags to be excluded)",
+            Logger.Log("Got {0:N0} results in total, baseQueryCounter = {1:N0}, itemsSkipped = {2:N0}, excludedCounter = {3:N0} ({4} tags to be excluded)",
                        queryResult.Results.Count(), queryResult.BaseQueryCounter, queryResult.ItemsSkipped,
                        queryResult.ExcludedCounter, tagsToExclude != null ? tagsToExclude.Count.ToString("N0") : "NO");
 
@@ -299,6 +301,12 @@ namespace StackOverflowTagServer.Querying
         {
             var queryResult = new ComplexQueryResult { Results = new List<Question>(pageSize), BaseQueryCounter = 0, ItemsSkipped = 0, ExcludedCounter = 0 };
 
+            // TODO this has a small bug, we can get items out of order as we pull them thru in pairs
+            // if t2 has several items that are larger than t1, t1 will still come out first!!
+            // So algorithm needs to be:
+            //  1) pull the LARGEST value (from t1 or t2)
+            //  2) process this item
+            //  3) repeat 1) again
             var orNotHashSet = cache.Value.GetCachedHashSet(tag2Ids);
             var seenBefore = secondCache.Value.GetCachedHashSet();
             using (IEnumerator<int> e1 = tag1Ids.AsEnumerable().GetEnumerator())

@@ -50,9 +50,8 @@ namespace StackOverflowTagServer
 
         internal static IDisposable SetConsoleColour(ConsoleColor newColour)
         {
-            var originalColour = Console.ForegroundColor;
             Console.ForegroundColor = newColour;
-            return new DisposableAction(() => Console.ForegroundColor = originalColour);
+            return new DisposableAction(() => Console.ResetColor());
         }
 
         internal static ConsoleColor GetColorForTimespan(TimeSpan elapsed)

@@ -16,7 +16,7 @@ namespace StackOverflowTagServer.Querying
 
             UseLeppieExclusions = false;
             DebugMode = false;
-    }
+        }
 
         public QueryType Type { get; set; }
         public int PageSize { get; set; }

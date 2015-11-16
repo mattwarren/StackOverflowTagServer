@@ -4,7 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-
+#if DEBUG
+using System.Threading;
+using StackOverflowTagServer.CLR;
+#endif
 using TagByQueryLookup = System.Collections.Generic.Dictionary<string, int[]>;
 
 namespace StackOverflowTagServer.Querying
@@ -177,6 +180,10 @@ namespace StackOverflowTagServer.Querying
             return results;
         }
 
+#if DEBUG
+        private readonly ThreadLocal<HashSetCache<int>> cache;
+#endif
+
         /// <summary>
         /// Similar to <seealso cref="BooleanQueryWithExclusionsFastAlternativeVersion"/> using a BloomFilter instead of a HashSet
         /// Load up the BloomFilter with the exclusions, then loop through the Base Query, until we have pageSize + Skip items that aren't in the BloomFilter.
@@ -207,7 +214,7 @@ namespace StackOverflowTagServer.Querying
 #if DEBUG
             //var tests = new[] { 1066589, 2793150, 364114, 910374 }; // These are the Question Id's NOT the array index ([]) values!!
             var tests = new[] {  192257,  616585,  53029, 158368 }; // These ARE the array index ([]) values
-            var debugging = HashSetCache.Value;
+            var debugging = cache.Value.GetCachedHashSet();
 #endif
             foreach (var excludedTag in excludedTags)
             {
