@@ -331,8 +331,10 @@ namespace StackOverflowTagServer
                                                     DateTime.Now.ToString("yyyy-MM-dd @ HH-mm-ss"), queryTypeToTest, tag1, query, tag2));
                 Results.AddHeaders("Skip Count",
                                    String.Format("Regular {0} {1} {2}", tag1, query, tag2),
-                                   String.Format("Regular {0} {1} {2}", tag2, query, tag1),
+                                   String.Format("LINQ {0} {1} {2}", tag1, query, tag2),
                                    String.Format("BitMap {0} {1} {2}", tag1, query, tag2),
+                                   String.Format("Regular {0} {1} {2}", tag2, query, tag1),
+                                   String.Format("LINQ {0} {1} {2}", tag2, query, tag1),
                                    String.Format("BitMap {0} {1} {2}", tag2, query, tag1));
 
                 using (Utils.SetConsoleColour(ConsoleColor.Yellow))
