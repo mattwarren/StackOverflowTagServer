@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
+using System.Threading;
 using StackOverflowTagServer.Querying;
 using StackOverflowTagServer.DataStructures;
 
@@ -196,9 +197,12 @@ namespace StackOverflowTagServer
 
         internal void ValidateExclusionBitMap(EwahCompressedBitArray bitMapIndex, CLR.HashSet<string> expandedTagsNGrams, QueryType queryType)
         {
+            // Exclusion BitMap is Set (i.e. 1) in places where you CAN use the question, i.e. it's NOT excluded
             var questionLookup = GetTagByQueryLookup(queryType)[TagServer.ALL_TAGS_KEY];
             var invalidQuestions = new List<Tuple<Question, string>>();
-            var positions = bitMapIndex.GetPositions();
+            var NOTbitMapIndex = ((EwahCompressedBitArray)bitMapIndex.Clone());
+            NOTbitMapIndex.Not();
+            var positions = NOTbitMapIndex.GetPositions();
             foreach (var position in positions)
             {
                 var question = questions[questionLookup[position]];
@@ -217,7 +221,8 @@ namespace StackOverflowTagServer
             if (invalidQuestions.Any())
             {
                 using (Utils.SetConsoleColour(ConsoleColor.Red))
-                    Logger.Log("ERROR Validating Exclusion Bit Map, {1} questions should have been excluded", invalidQuestions.Count);
+                    Logger.Log("ERROR Validating Exclusion Bit Map, {0:N0} questions should have been excluded",
+                               invalidQuestions.Select(i => i.Item1.Id).Distinct().Count());
 
                 foreach (var error in invalidQuestions)
                 {
@@ -225,9 +230,8 @@ namespace StackOverflowTagServer
                 }
             }
 
-            var expectedPositionsBitMap = ((EwahCompressedBitArray)bitMapIndex.Clone());
-            expectedPositionsBitMap.Not();
-            var expectedPositions = expectedPositionsBitMap.GetPositions();
+
+            var expectedPositions = bitMapIndex.GetPositions();
             foreach (var position in expectedPositions)
             {
                 var question = questions[questionLookup[position]];
