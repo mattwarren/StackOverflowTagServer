@@ -79,9 +79,10 @@ namespace StackOverflowTagServer.Querying
                 if (printLoggingMessages)
                     cardinalityBeforeExclusions = bitMapResult.GetCardinality();
 
+                // The Exclusiong BitMap is Set (i.e. 1) in places where you CAN use the question, i.e. it's NOT excluded
+                // That way we can efficiently apply the exclusions by ANDing this BitMap to the previous results
                 var exclusionTimer = Stopwatch.StartNew();
-                bitMapResult = bitMapResult.And(exclusionBitMap);
-                //bitMapResult = bitMapResult.AndNot(exclusionBitMap);
+                bitMapResult = bitMapResult.AndNot(exclusionBitMap);
                 exclusionTimer.Stop();
 
                 if (printLoggingMessages)

@@ -24,8 +24,7 @@ namespace StackOverflowTagServer
 
         private readonly ThreadLocal<HashSetCache<int>> cache;
 
-        internal BitMapIndexHandler(List<Question> questions,
-                                    TagLookup allTags,
+        internal BitMapIndexHandler(List<Question> questions, TagLookup allTags,
                                     Func<QueryType, TagByQueryLookup> getTagByQueryLookup,
                                     Func<QueryType, TagByQueryBitMapLookup> getTagByQueryBitMapLookup)
         {
@@ -39,9 +38,8 @@ namespace StackOverflowTagServer
         internal EwahCompressedBitArray CreateBitMapIndexForExcludedTags(CLR.HashSet<string> tagsToExclude, QueryType queryType, bool printLoggingMessages = false)
         {
             var bitMapTimer = Stopwatch.StartNew();
-            var tagLookupForQueryType = GetTagByQueryLookup(queryType);
-            var bitMap = new EwahCompressedBitArray();
 
+            var tagLookupForQueryType = GetTagByQueryLookup(queryType);
             var collectIdsTimer = Stopwatch.StartNew();
             var excludedQuestionIds = cache.Value.GetCachedHashSet();
             foreach (var tag in tagsToExclude)
@@ -57,53 +55,23 @@ namespace StackOverflowTagServer
             // That way we can efficiently apply the exclusions by ANDing this BitMap to the previous results
 
             var allQuestions = tagLookupForQueryType[TagServer.ALL_TAGS_KEY];
-            var reverseMode = excludedQuestionIds.Count < (questions.Count / 2);
-
             var setBitsTimer = Stopwatch.StartNew();
+            var bitMap = new EwahCompressedBitArray();
             for (int index = 0; index < allQuestions.Length; index++)
             {
-                bool wasSet = true;
-                var shouldExclude = excludedQuestionIds.Contains(allQuestions[index]);
-                if (reverseMode && shouldExclude)
-                    wasSet = bitMap.Set(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-                else if (reverseMode == false && shouldExclude == false)
-                    wasSet = bitMap.Set(index); // Directly set a bit where you CAN use the question (won't do a NOT afterwards)
-
-                if (wasSet == false)
-                    Logger.LogStartupMessage("Error, unable to set bit {0:N0} (SizeInBits = {1:N0})", index, bitMap.SizeInBits);
+                if (excludedQuestionIds.Contains(allQuestions[index]))
+                {
+                    var wasSet = bitMap.SetOptimised(index); // Set a bit where you CAN'T use a question
+                    if (wasSet == false)
+                        Logger.LogStartupMessage("Error, unable to set bit {0:N0} (SizeInBits = {1:N0})", index, bitMap.SizeInBits);
+                }
             }
-
             setBitsTimer.Stop();
-
-            var alternativeBitSetTimer = Stopwatch.StartNew();
-            var bitArrayLength = BitHelper.ToIntArrayLength(questions.Count);
-            var bitHelperArray = new int[bitArrayLength];
-            var bitSet = new BitHelper(bitHelperArray, bitArrayLength);
-            bitSet.SetMaxAllowedBit(questions.Count);
-
-            for (int index = 0; index < allQuestions.Length; index++)
-            {
-                var shouldExclude = excludedQuestionIds.Contains(allQuestions[index]);
-                if (reverseMode && shouldExclude)
-                    bitSet.MarkBit(index); // Set a bit where you CAN'T use a question, but at the end NOT the whole BitMap (see below)
-                else if (reverseMode == false && shouldExclude == false)
-                    bitSet.MarkBit(index); // Directly set a bit where you CAN use the question (won't do a NOT afterwards)
-            }
-
-            alternativeBitSetTimer.Stop();
 
             var tidyUpTimer = Stopwatch.StartNew();
             bitMap.SetSizeInBits(questions.Count, defaultvalue: false);
             bitMap.Shrink();
             tidyUpTimer.Stop();
-
-            var notTimer = Stopwatch.StartNew();
-            if (reverseMode)
-            {
-                bitMap.Not(); // in-place
-                bitSet.Not(); // in-place
-            }
-            notTimer.Stop();
 
             bitMapTimer.Stop();
 
@@ -111,28 +79,19 @@ namespace StackOverflowTagServer
             {
                 Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to collect {2:N0} Question Ids from {3:N0} Tags",
                                          collectIdsTimer.Elapsed, collectIdsTimer.ElapsedMilliseconds, excludedQuestionIds.Count, tagsToExclude.Count);
-                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits {3}",
-                                         setBitsTimer.Elapsed, setBitsTimer.ElapsedMilliseconds,
-                                         reverseMode ? ((ulong)questions.Count - bitMap.GetCardinality()) : bitMap.GetCardinality(),
-                                         reverseMode ? "(in REVERSE mode)" : "");
-                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits using ALTERNATIVE mode {3}",
-                                         alternativeBitSetTimer.Elapsed, alternativeBitSetTimer.ElapsedMilliseconds,
-                                         (reverseMode ? (questions.Count - bitSet.GetCardinality()) : bitSet.GetCardinality()),
-                                         reverseMode ? "(in REVERSE mode)" : "");
+                Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to set {2:N0} bits",
+                                         setBitsTimer.Elapsed, setBitsTimer.ElapsedMilliseconds, bitMap.GetCardinality());
                 Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to tidy-up the Bit Map (SetSizeInBits(..) and Shrink()), Size={2:N0} bytes ({3:N2} MB)",
                                          tidyUpTimer.Elapsed, tidyUpTimer.ElapsedMilliseconds, bitMap.SizeInBytes, bitMap.SizeInBytes / 1024.0 / 1024.0);
-                if (reverseMode)
-                    Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to do a NOT on the BitMap", notTimer.Elapsed, notTimer.ElapsedMilliseconds);
 
                 using (Utils.SetConsoleColour(ConsoleColor.DarkYellow))
                 {
-                    Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) to create BitMap from {2:N0} Tags ({3:N0} Qu Ids), Cardinality={4:N0} ({5:N0}) {6}\n",
+                    Logger.LogStartupMessage("Took {0} ({1,6:N0} ms) in TOTAL, made BitMap from {2:N0} Tags ({3:N0} Qu Ids), Cardinality={4:N0} ({5:N0})\n",
                                              bitMapTimer.Elapsed, bitMapTimer.ElapsedMilliseconds,
                                              tagsToExclude.Count,
                                              excludedQuestionIds.Count,
                                              bitMap.GetCardinality(),
-                                             (ulong)questions.Count - bitMap.GetCardinality(),
-                                             reverseMode ? "REVERSE mode" : "");
+                                             (ulong)questions.Count - bitMap.GetCardinality());
                 }
             }
 
