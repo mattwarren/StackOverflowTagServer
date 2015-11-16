@@ -340,20 +340,48 @@ namespace StackOverflowTagServer
                 foreach (var skipCount in skipCounts)
                 {
                     Results.AddData(skipCount.ToString());
-                    Console.ForegroundColor = ConsoleColor.DarkGreen;
-                    var info = new QueryInfo { Type = QueryType.ViewCount, Tag = tag1, OtherTag = tag2, Operator = query, PageSize = pageSize, Skip = skipCount };
-                    var result1 = tagServer.ComparisonQueryNoLINQ(info, tagsToExclude);
-                    info.Tag = tag2; info.OtherTag = tag1; // reverse the 2 tags
-                    var result2 = tagServer.ComparisonQueryNoLINQ(info, tagsToExclude);
 
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    info.Tag = tag1; info.OtherTag = tag2; // put the 2 tags back to what they were
-                    var result3 = tagServer.ComparisionQueryBitMapIndex(info, exclusionBitMap);
-                    info.Tag = tag2; info.OtherTag = tag1; // reverse the 2 tags
-                    var result4 = tagServer.ComparisionQueryBitMapIndex(info, exclusionBitMap);
+                    // Run the query both ways round, i.e. "c# AND-NOT jquery" as well as "jquery AND-NOT c#")
+                    foreach (var tagPair in new[] { Tuple.Create(tag1, tag2), Tuple.Create(tag2, tag1) })
+                    {
+                        var info = new QueryInfo
+                        {
+                            Type = queryTypeToTest,
+                            Tag = tagPair.Item1,
+                            OtherTag = tagPair.Item2,
+                            Operator = query,
+                            PageSize = pageSize,
+                            Skip = skipCount
+                        };
 
-                    Utils.CompareLists(result1.Questions, "Regular", result3.Questions, "BitMap");
-                    Utils.CompareLists(result2.Questions, "Regular", result4.Questions, "BitMap");
+                        Console.ForegroundColor = ConsoleColor.DarkGreen;
+                        var resultRegular = tagServer.ComparisonQueryNoLINQ(info, tagsToExclude);
+                        var resultLINQ = tagServer.ComparisonQuery(info, tagsToExclude);
+
+                        //using (Utils.SetConsoleColour(ConsoleColor.Gray));
+                        //    Utils.CompareLists(resultRegular.Questions, "Regular", resultLINQ.Questions, "LINQ");
+
+                        Console.ForegroundColor = ConsoleColor.Cyan;
+                        var resultBitMap = tagServer.ComparisionQueryBitMapIndex(info, exclusionBitMap, printLoggingMessages: true);
+
+                        var invalidResults = tagServer.GetInvalidResults(resultBitMap.Questions, info);
+                        var shouldHaveBeenExcludedResults = tagServer.GetShouldHaveBeenExcludedResults(resultBitMap.Questions, info, tagsToExclude);
+                        if (shouldHaveBeenExcludedResults.Count > 0)
+                        {
+                            using (Utils.SetConsoleColour(ConsoleColor.Red))
+                                Logger.LogStartupMessage("ERROR: shouldHaveBeenExcludedResults contains {0} items", shouldHaveBeenExcludedResults.Count);
+                        }
+
+                        using (Utils.SetConsoleColour(ConsoleColor.Red))
+                        {
+                            // See the TODO comments in ComplexQueryProcessor.cs for an explanation of this issue
+                            if (query == "OR" || query == "OR-NOT")
+                                Logger.LogStartupMessage("It is EXPECTED that {0} queries won't match when comparing \"Regular\" v. \"BitMap\"", query);
+                        }
+
+                        //using (Utils.SetConsoleColour(ConsoleColor.Gray));
+                        //    Utils.CompareLists(resultRegular.Questions, "Regular", resultBitMap.Questions, "BitMap");
+                    }
 
                     Console.ResetColor();
                     Results.StartNewRow();
